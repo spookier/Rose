@@ -41,10 +41,10 @@ def should_exclude_path(path, gitignore_patterns):
     return False
 
 def build_executable():
-    """Build the LoL Skin Changer executable using PyInstaller"""
+    """Build the SkinCloner executable using PyInstaller"""
     
     print("=" * 50)
-    print("Building LoL Skin Changer Executable")
+    print("Building SkinCloner Executable")
     print("=" * 50)
     
     # Read .gitignore patterns
@@ -160,7 +160,7 @@ def build_executable():
         
         # Create a simple launcher script with verbose logging
         launcher_content = '''@echo off
-echo Starting LoL Skin Changer with verbose logging...
+echo Starting SkinCloner with verbose logging...
 echo.
 "%~dp0SkinCloner.exe" --verbose
 if errorlevel 1 (

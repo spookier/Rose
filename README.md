@@ -6,6 +6,7 @@ A complete League of Legends skin changer that automatically detects skins using
 
 ### 🚀 **Option 1: Download Installer (Recommended for Most Users)**
 For users who want a simple, ready-to-use application:
+- **⚠️ MANDATORY**: Install Tesseract OCR first from [https://github.com/UB-Mannheim/tesseract/releases](https://github.com/UB-Mannheim/tesseract/releases)
 - **Download the latest installer** from our releases
 - **Run the installer** and follow the setup wizard
 - **Launch the app** from your desktop or start menu
@@ -15,6 +16,7 @@ For users who want a simple, ready-to-use application:
 
 ### 💻 **Option 2: Run from Source Code (For Developers/Advanced Users)**
 For developers or users who want to modify the code:
+- **⚠️ MANDATORY**: Install Tesseract OCR first from [https://github.com/UB-Mannheim/tesseract/releases](https://github.com/UB-Mannheim/tesseract/releases)
 - **Clone this repository**
 - **Install Python dependencies**
 - **Run `main.py`** directly
@@ -24,11 +26,15 @@ For developers or users who want to modify the code:
 
 ## 🚀 Quick Start (Installer Version)
 
-1. **Download** the latest installer from the releases page
-2. **Run** `SkinCloner_Setup.exe` as Administrator
-3. **Launch** League of Legends and start a game
-4. **Hover over skins** in champion select for 2+ seconds
-5. **Enjoy** your custom skins automatically injected!
+1. **⚠️ MANDATORY**: Install Tesseract OCR first from [https://github.com/UB-Mannheim/tesseract/releases](https://github.com/UB-Mannheim/tesseract/releases)
+   - Download the latest Windows installer (e.g., `tesseract-ocr-w64-setup-5.x.x.exe`)
+   - Run as Administrator and install with default settings
+   - **This is required** - the app cannot function without Tesseract OCR
+2. **Download** the latest SkinCloner installer from the releases page
+3. **Run** `SkinCloner_Setup.exe` as Administrator
+4. **Launch** League of Legends and start a game
+5. **Hover over skins** in champion select for 2+ seconds
+6. **Enjoy** your custom skins automatically injected!
 
 **That's it!** The system handles everything automatically - no manual intervention required!
 
@@ -97,8 +103,7 @@ SkinCloner/
 
 - **🚀 Two Usage Options**: Simple installer for users, source code for developers
 - **Fully Automated**: Works automatically - no manual intervention required!
-- **Multi-Language Support**: Works with any League of Legends client language (17 languages supported)
-- **⚠️ Limitation**: Languages with non-Latin alphabets (Chinese, Japanese, Korean, Arabic, etc.) are currently not supported due to OCR limitations
+- **Multi-Language Support**: Works with League of Legends client languages that use Latin alphabets
 - **Smart Detection**: OCR automatically detects skin names during champion select
 - **Instant Injection**: Skins are injected 2 seconds before game starts
 - **Massive Collection**: 8,277+ skins for 171 champions included
@@ -115,19 +120,18 @@ SkinCloner/
 
 **For developers and advanced users who want to run from source:**
 
-1. **Install Python 3.11**
-2. **Clone this repository**:
+1. **⚠️ MANDATORY**: Install Tesseract OCR first from [https://github.com/UB-Mannheim/tesseract/releases](https://github.com/UB-Mannheim/tesseract/releases)
+2. **Install Python 3.11**
+3. **Clone this repository**:
    ```bash
    git clone https://github.com/AlbanCliquet/SkinCloner.git
    cd SkinCloner
    ```
-3. **Install dependencies**:
+4. **Install dependencies**:
    ```bash
    pip install -r requirements.txt
    ```
    This will automatically install the local tesserocr wheel from the `dependencies/` folder.
-4. **Install Tesseract OCR** on your system (see detailed instructions below)
-   - **No manual configuration needed** - the application automatically detects and configures Tesseract
 5. **Verify installation** (optional but recommended):
    ```bash
    python utils/check_tesseract.py
@@ -146,16 +150,7 @@ SkinCloner/
    # Optional: Specify language (auto-detection by default)
    python main.py                     # Auto-detect (default)
    python main.py --language es_ES    # Spanish
-   python main.py --language fr_FR    # French
-   python main.py --language zh_CN    # Chinese Simplified
-   
-   
-   # Optional: Specify OCR language for non-Latin alphabets
-   python main.py                     # Auto-detect OCR language (default)
-   python main.py --lang kor          # Korean OCR
-   python main.py --lang chi_sim      # Chinese Simplified OCR
-   python main.py --lang ell          # Greek OCR
-   
+   python main.py --language fr_FR    # French   
    
    # Optional: Disable multi-language support
    python main.py --no-multilang
@@ -213,10 +208,6 @@ The system provides real-time status updates:
   - `es_ES`: Spanish (Spain)
   - `fr_FR`: French
   - `de_DE`: German
-  - `zh_CN`: Chinese (Simplified)
-  - `ja_JP`: Japanese
-  - `ko_KR`: Korean
-  - `ru_RU`: Russian
   - `pt_BR`: Portuguese (Brazil)
   - `it_IT`: Italian
   - `tr_TR`: Turkish
@@ -224,7 +215,6 @@ The system provides real-time status updates:
   - `hu_HU`: Hungarian
   - `ro_RO`: Romanian
   - `el_GR`: Greek
-  - `zh_TW`: Chinese (Traditional)
   - `es_MX`: Spanish (Mexico)
 
 ### OCR Language Options
@@ -234,12 +224,7 @@ The system provides real-time status updates:
   - `fra+eng`: French + English
   - `spa+eng`: Spanish + English
   - `deu+eng`: German + English
-  - `kor+eng`: Korean + English
-  - `chi_sim+eng`: Chinese Simplified + English
-  - `chi_tra+eng`: Chinese Traditional + English
-  - `jpn+eng`: Japanese + English
   - `ell+eng`: Greek + English
-  - `rus+eng`: Russian + English
   - `pol+eng`: Polish + English
   - `tur+eng`: Turkish + English
   - `hun+eng`: Hungarian + English
@@ -248,11 +233,10 @@ The system provides real-time status updates:
   - `ita+eng`: Italian + English
 
 ### Supported Languages
-The system supports 17 languages with automatic detection and optimized loading:
+The system supports Latin alphabet languages with automatic detection and optimized loading:
 - **Auto-Detection**: Automatically detects language from LCU API and OCR text
 - **Manual Selection**: Force specific language for better performance
 - **Optimized Loading**: Only loads necessary language databases
-- **OCR Language Mapping**: Automatically selects appropriate OCR language for non-Latin alphabets
 - **English Mapping**: All results logged in English for consistency
 
 ## Dependencies
@@ -345,10 +329,10 @@ brew install tesseract-lang
 |----------|------|----------|------|
 | English  | eng  | Spanish  | spa  |
 | French   | fra  | German   | deu  |
-| Chinese (Simplified) | chi_sim | Chinese (Traditional) | chi_tra |
-| Japanese | jpn  | Korean   | kor  |
 | Italian  | ita  | Portuguese | por |
-| Russian  | rus  | Polish   | pol  |
+| Polish   | pol  | Greek    | ell  |
+| Turkish  | tur  | Hungarian | hun |
+| Romanian | ron  |          |      |
 
 ### Troubleshooting Tesseract Issues
 
@@ -396,7 +380,6 @@ If you encounter Tesseract-related errors:
 - **Game not detected**: Ensure League of Legends is installed in default location
 - **Language issues**: Use `--language auto` for automatic detection or specify your client's language
 - **Performance issues**: Use manual language selection (`--language <lang>`) for better performance
-- **Non-Latin alphabet issues**: Languages with non-Latin alphabets (Chinese, Japanese, Korean, Arabic, etc.) are currently not supported due to OCR limitations
 - **OCR language not found**: Ensure Tesseract OCR has the required language packs installed
 - **Tesseract OCR errors**: Run `python utils/check_tesseract.py` to diagnose installation issues
 - **Permission errors**: The installer version automatically uses user data directories to avoid permission issues
@@ -406,11 +389,11 @@ If you encounter Tesseract-related errors:
 **For Installer Version:**
 - Windows 10/11
 - League of Legends installed
-- Tesseract OCR installed (for OCR functionality)
+- **⚠️ MANDATORY**: Tesseract OCR installed from [https://github.com/UB-Mannheim/tesseract/releases](https://github.com/UB-Mannheim/tesseract/releases)
 
 **For Source Code Version:**
 - Python 3.11+
-- Tesseract OCR installed
+- **⚠️ MANDATORY**: Tesseract OCR installed from [https://github.com/UB-Mannheim/tesseract/releases](https://github.com/UB-Mannheim/tesseract/releases)
 - League of Legends installed
 - Windows operating system (for CSLOL tools)
 - CSLOL tools present in `injection/tools/` directory
@@ -440,7 +423,7 @@ The build process creates a single executable file that includes:
 
 **Note**: Users still need to have:
 - League of Legends installed and running
-- Tesseract OCR installed (for OCR functionality)
+- **⚠️ MANDATORY**: Tesseract OCR installed from [https://github.com/UB-Mannheim/tesseract/releases](https://github.com/UB-Mannheim/tesseract/releases)
 
 ## 📦 Creating Windows Installer (For Developers)
 

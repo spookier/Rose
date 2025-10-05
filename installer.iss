@@ -1,9 +1,9 @@
-; LoL Skin Changer Installer Script for Inno Setup
+; SkinCloner Installer Script for Inno Setup
 ; This creates a proper Windows installer that registers the app
 
-#define MyAppName "LoL Skin Changer"
+#define MyAppName "SkinCloner"
 #define MyAppVersion "1.0.0"
-#define MyAppPublisher "LoL Skin Changer Team"
+#define MyAppPublisher "SkinCloner Team"
 #define MyAppURL "https://github.com/AlbanCliquet/SkinCloner"
 #define MyAppExeName "SkinCloner.exe"
 #define MyAppDescription "Automated League of Legends skin changer with OCR detection"

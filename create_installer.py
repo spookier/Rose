@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Create Windows installer for LoL Skin Changer using Inno Setup
+Create Windows installer for SkinCloner using Inno Setup
 """
 
 import os
@@ -14,7 +14,7 @@ def create_installer():
     """Create Windows installer using Inno Setup"""
     
     print("=" * 60)
-    print("Creating LoL Skin Changer Windows Installer")
+    print("Creating SkinCloner Windows Installer")
     print("=" * 60)
     
     # Check if Inno Setup is installed
