@@ -69,7 +69,8 @@ def setup_logging(verbose: bool):
         logs_dir.mkdir(exist_ok=True)
         
         # Create a unique log file for this session with timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Format: dd-mm-yyyy_hh-mm-ss (European format, no colons for Windows compatibility)
+        timestamp = datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
         log_file = logs_dir / f"skincloner_{timestamp}.log"
         
         # Setup file handler (no rotation needed since each session has its own file)
