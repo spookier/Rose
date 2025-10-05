@@ -170,6 +170,8 @@ SkinCloner/
 4. **The system automatically injects** the skin 2 seconds before the game starts
 5. **Enjoy your custom skin** in the game!
 
+**Important**: The hovered skin will only be injected if the last owned skin hovered was the base one. Base skins are automatically skipped.
+
 ### Fully Automated Mode (Default)
 The system will:
 - Connect to League Client automatically
