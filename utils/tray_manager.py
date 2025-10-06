@@ -90,16 +90,21 @@ class TrayManager:
         image = base_image.copy()
         draw = ImageDraw.Draw(image)
         
-        # Draw orange dot in bottom-right corner
-        dot_size = 20
-        x = image.width - dot_size - 4
-        y = image.height - dot_size - 4
+        # Draw orange dot in bottom-right corner (bigger size)
+        dot_size = 28
+        x = image.width - dot_size - 2
+        y = image.height - dot_size - 2
         
-        # Draw the dot with a border for better visibility
+        # Draw the dot with a black border and orange fill
+        # First draw black border
+        draw.ellipse([x-1, y-1, x + dot_size + 1, y + dot_size + 1], 
+                    fill=(0, 0, 0, 255),  # Black border
+                    outline=None)
+        
+        # Then draw the orange dot on top
         draw.ellipse([x, y, x + dot_size, y + dot_size], 
                     fill=(255, 140, 0, 255),  # Orange
-                    outline=(200, 100, 0, 255),  # Darker orange border
-                    width=2)
+                    outline=None)
         
         return image
     

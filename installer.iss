@@ -2,7 +2,7 @@
 ; This creates a proper Windows installer that registers the app
 
 #define MyAppName "SkinCloner"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "SkinCloner Team"
 #define MyAppURL "https://github.com/AlbanCliquet/SkinCloner"
 #define MyAppExeName "SkinCloner.exe"
