@@ -13,26 +13,30 @@ SkinCloner is a fully automated system that detects skin selections in League of
 #### Download and Installation
 
 1. **Download Tesseract OCR for Windows:**
+
    - Visit: **[https://github.com/UB-Mannheim/tesseract/releases](https://github.com/UB-Mannheim/tesseract/releases)**
    - Download the latest Windows installer (e.g., `tesseract-ocr-w64-setup-5.x.x.exe`)
 
 2. **Install Tesseract OCR:**
+
    - Run the installer **as Administrator**
    - **IMPORTANT**: During installation, select "Additional language data" to install language packs
    - Use the default installation path: `C:\Program Files\Tesseract-OCR\`
 
 3. **Optional - Add to System PATH** (Recommended):
-     ```powershell
+
+   ```powershell
    # Add Tesseract to PATH (run as Administrator)
-     $env:PATH += ";C:\Program Files\Tesseract-OCR"
-     [Environment]::SetEnvironmentVariable("PATH", $env:PATH, [EnvironmentVariableTarget]::Machine)
-     ```
+   $env:PATH += ";C:\Program Files\Tesseract-OCR"
+   [Environment]::SetEnvironmentVariable("PATH", $env:PATH, [EnvironmentVariableTarget]::Machine)
+   ```
 
 4. **Verify Installation:**
+
    ```bash
    # Check if Tesseract is accessible
    tesseract --version
-   
+
    # Check available languages
    tesseract --list-langs
    ```
@@ -51,6 +55,7 @@ SkinCloner is a fully automated system that detects skin selections in League of
 4. **Launch the app** from your desktop or start menu
 
 **System Requirements:**
+
 - Windows 10/11
 - League of Legends installed
 - Tesseract OCR installed (see Prerequisites)
@@ -61,15 +66,18 @@ SkinCloner is a fully automated system that detects skin selections in League of
 
 1. **Install Python 3.11**
 2. **Clone this repository:**
+
    ```bash
    git clone https://github.com/AlbanCliquet/SkinCloner.git
    cd SkinCloner
    ```
 
 3. **Install dependencies:**
+
    ```bash
    pip install -r requirements.txt
    ```
+
    This automatically installs the local tesserocr wheel from the `dependencies/` folder.
 
 4. **Verify installation** (optional but recommended):
@@ -78,6 +86,7 @@ SkinCloner is a fully automated system that detects skin selections in League of
    ```
 
 **System Requirements:**
+
 - Windows 10/11
 - Python 3.11
 - Tesseract OCR installed (see Prerequisites)
@@ -117,16 +126,16 @@ While you play, SkinCloner operates through a sophisticated multi-threaded syste
 
 1. **Phase Detection**: Monitors League Client for game phases (lobby, champion select, in-game)
 2. **OCR Activation**: Automatically activates OCR when entering champion select
-3. **Champion Lock Detection**: Detects when you lock a champion and immediately starts pre-building
-4. **Intelligent Pre-Building**: Pre-builds overlay files for all skins of your locked champion in parallel (takes ~10-15 seconds)
+3. **Champion Lock Detection**: Detects when you lock a champion and fetches your owned skins from LCU
+4. **Smart Pre-Building**: Pre-builds overlay files **only for unowned skins** of your locked champion in parallel (optimized based on your inventory)
 5. **Real-Time Skin Detection**: Uses advanced OCR to detect skin names as you hover over them during champion select
-6. **Smart Matching**: Applies fuzzy matching algorithms to accurately identify skins even with partial text
-7. **Instant Injection**: Injects the last hovered skin 200 milliseconds before game starts using pre-built overlays (<100 milliseconds injection time)
+6. **Ownership Verification**: Automatically skips injection if you already own the detected skin
+7. **Base Skin Forcing**: Forces base skin selection before injection (required for proper skin overlay)
+8. **Instant Injection**: Injects the last hovered unowned skin 200 milliseconds before game starts using pre-built overlays (<100 milliseconds injection time)
 
-**Performance**: Pre-building allows near-instant skin injection instead of the traditional 2 second wait. The system intelligently manages resources and cancels incomplete pre-builds when entering a new champion select.
+**Performance**: Pre-building allows near-instant skin injection instead of the traditional 2 second wait. The system intelligently filters owned skins to reduce pre-build time and only injects skins you don't own.
 
 **No manual intervention required - just launch the app and play!**
-
 
 ## ✨ Features
 
@@ -135,7 +144,9 @@ While you play, SkinCloner operates through a sophisticated multi-threaded syste
 - **🎯 Fully Automated**: Works completely automatically - no manual intervention required
 - **🔍 Advanced OCR Detection**: Uses Tesseract OCR with optimized image processing for accurate skin name recognition
 - **⚡ Instant Injection**: Pre-builds overlays on champion lock for near-instant injection (<100 milliseconds) 200 milliseconds before game starts
-- **🚀 Intelligent Pre-Building**: Parallel overlay generation for all champion skins when you lock your champion
+- **🚀 Smart Pre-Building**: Only pre-builds unowned skins by checking LCU inventory - saves time and resources
+- **✅ Ownership Detection**: Automatically detects owned skins and skips injection to avoid conflicts
+- **🔄 Base Skin Forcing**: Intelligently forces base skin selection before injection
 - **🌍 Multi-Language Support**: Supports many languages with automatic detection
 - **📊 Massive Skin Collection**: 8,277+ skins for 171 champions included
 - **🧠 Smart Matching**: Advanced fuzzy matching algorithms for accurate skin detection
@@ -144,10 +155,11 @@ While you play, SkinCloner operates through a sophisticated multi-threaded syste
 
 - **🏗️ Modular Architecture**: Clean, maintainable codebase with separated concerns
 - **🧵 Multi-threaded Design**: Optimal performance with concurrent processing
-- **🔄 LCU Integration**: Real-time communication with League Client API
+- **🔄 LCU Integration**: Real-time communication with League Client API (with fallback endpoints for robustness)
 - **🛠️ CSLOL Tools**: Reliable injection using proven CSLOL modification tools
 - **📈 Optimized Loading**: Only loads necessary language databases for better performance
 - **🔒 Permission-Safe**: Uses user data directories to avoid permission issues
+- **🎮 Inventory-Aware**: Fetches owned skins from LCU to optimize pre-building and prevent unnecessary injections
 
 ### Advanced Features
 
@@ -165,6 +177,8 @@ While you play, SkinCloner operates through a sophisticated multi-threaded syste
 - **🎯 ROI Locking**: Intelligent region-of-interest detection and locking
 - **🔄 Adaptive Timing**: Dynamic timing adjustments based on system performance
 - **📊 Rate Limiting**: Intelligent GitHub API rate limiting for skin downloads
+- **🎭 Smart Filtering**: Pre-builds only unowned skins by filtering against LCU inventory
+- **🔧 Robust Fallbacks**: Multiple LCU endpoints for reliable base skin forcing
 
 ---
 
@@ -249,4 +263,4 @@ This tool is for educational purposes only. Use at your own risk. The developers
 
 ---
 
-**SkinCloner** -  League of Legends Skin Changer
+**SkinCloner** - League of Legends Skin Changer
