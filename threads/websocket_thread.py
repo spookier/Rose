@@ -239,7 +239,7 @@ class WSEventThread(threading.Thread):
                     if self.injection_manager:
                         try:
                             log.info(f"[lock:champ] Triggering pre-build for {champ_label}")
-                            self.injection_manager.on_champion_locked(champ_label)
+                            self.injection_manager.on_champion_locked(champ_label, ch, self.state.owned_skin_ids)
                         except Exception as e:
                             log.error(f"[lock:champ] Failed to start pre-build for {champ_label}: {e}")
                     else:

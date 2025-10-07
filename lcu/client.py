@@ -224,11 +224,15 @@ class LCU:
     
     def set_selected_skin(self, action_id: int, skin_id: int) -> bool:
         """Set the selected skin for a champion select action"""
+        if not self.ok:
+            self.refresh_if_needed()
+            if not self.ok:
+                log.warning("LCU set_selected_skin failed: LCU not connected")
+                return False
+        
         try:
-            response = requests.patch(
-                f"https://127.0.0.1:{self.port}/lol-champ-select/v1/session/actions/{action_id}",
-                auth=("riot", self.pw),
-                verify=False,
+            response = self.s.patch(
+                f"{self.base}/lol-champ-select/v1/session/actions/{action_id}",
                 json={"selectedSkinId": skin_id},
                 timeout=2.0
             )
@@ -239,4 +243,27 @@ class LCU:
                 return False
         except Exception as e:
             log.warning(f"LCU set_selected_skin exception: {e}")
+            return False
+    
+    def set_my_selection_skin(self, skin_id: int) -> bool:
+        """Set the selected skin using my-selection endpoint (works after champion lock)"""
+        if not self.ok:
+            self.refresh_if_needed()
+            if not self.ok:
+                log.warning("LCU set_my_selection_skin failed: LCU not connected")
+                return False
+        
+        try:
+            response = self.s.patch(
+                f"{self.base}/lol-champ-select/v1/session/my-selection",
+                json={"selectedSkinId": skin_id},
+                timeout=2.0
+            )
+            if response.status_code in (200, 204):
+                return True
+            else:
+                log.warning(f"LCU set_my_selection_skin failed: status={response.status_code}, response={response.text[:200]}")
+                return False
+        except Exception as e:
+            log.warning(f"LCU set_my_selection_skin exception: {e}")
             return False

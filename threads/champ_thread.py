@@ -68,11 +68,22 @@ class ChampThread(threading.Thread):
                         nm = self.db.champ_name_by_id.get(locked) or f"champ_{locked}"
                         log.info(f"[lock:champ] {nm} (id={locked})")
                         
+                        # Fetch owned skins from LCU inventory for accurate ownership checking
+                        try:
+                            owned_skins = self.lcu.owned_skins()
+                            if owned_skins and isinstance(owned_skins, list):
+                                self.state.owned_skin_ids = set(owned_skins)
+                                log.info(f"[lock:champ] Loaded {len(self.state.owned_skin_ids)} owned skins from LCU inventory")
+                            else:
+                                log.warning(f"[lock:champ] Failed to fetch owned skins from LCU")
+                        except Exception as e:
+                            log.warning(f"[lock:champ] Error fetching owned skins: {e}")
+                        
                         # Trigger pre-building when a new champion is locked
                         if self.injection_manager:
                             try:
                                 log.info(f"[lock:champ] Triggering pre-build for {nm}")
-                                self.injection_manager.on_champion_locked(nm)
+                                self.injection_manager.on_champion_locked(nm, locked, self.state.owned_skin_ids)
                             except Exception as e:
                                 log.error(f"[lock:champ] Failed to start pre-build for {nm}: {e}")
                         else:

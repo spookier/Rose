@@ -47,13 +47,13 @@ class InjectionManager:
                     self._initialized = True
                     log.info("[INJECT] Injection system initialized successfully")
     
-    def on_champion_locked(self, champion_name: str):
-        """Called when a champion is locked - starts pre-building all skins"""
+    def on_champion_locked(self, champion_name: str, champion_id: int = None, owned_skin_ids: set = None):
+        """Called when a champion is locked - starts pre-building unowned skins"""
         if not champion_name:
             log.debug("[INJECT] on_champion_locked called with empty champion name")
             return
         
-        log.info(f"[INJECT] on_champion_locked called for: {champion_name}")
+        log.info(f"[INJECT] on_champion_locked called for: {champion_name} (id={champion_id})")
         self._ensure_initialized()
         
         # Cancel any ongoing pre-build for different champion
@@ -68,7 +68,7 @@ class InjectionManager:
             def prebuild_worker():
                 try:
                     log.info(f"[INJECT] Starting pre-build for {champion_name}")
-                    success = self.prebuilder.prebuild_champion_skins(champion_name)
+                    success = self.prebuilder.prebuild_champion_skins(champion_name, champion_id, owned_skin_ids)
                     if success:
                         log.info(f"[INJECT] Pre-build completed for {champion_name}")
                     else:

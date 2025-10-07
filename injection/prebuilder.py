@@ -4,6 +4,7 @@ Pre-builder system for champion skins
 Builds all mkoverlay files when a champion is locked for instant injection
 """
 
+import re
 import time
 import threading
 import shutil
@@ -53,8 +54,8 @@ class ChampionPreBuilder:
         else:
             return DEFAULT_THREAD_COUNT
     
-    def find_champion_skins(self, champion_name: str) -> List[Tuple[str, Path]]:
-        """Find all skins for a specific champion"""
+    def find_champion_skins(self, champion_name: str, champion_id: int = None, owned_skin_ids: set = None) -> List[Tuple[str, Path]]:
+        """Find all skins for a specific champion, excluding owned skins"""
         champion_skins = []
         
         # Try different possible champion directory names
@@ -79,6 +80,44 @@ class ChampionPreBuilder:
                         champion_skins.append((skin_zip.stem, skin_zip))
                     for skin_zip in champion_dir.glob(f"*{champion_name}*.zip"):
                         champion_skins.append((skin_zip.stem, skin_zip))
+        
+        # Filter out owned skins if champion_id and owned_skin_ids are provided
+        if champion_id and owned_skin_ids:
+            filtered_skins = []
+            skipped_count = 0
+            
+            for skin_name, skin_path in champion_skins:
+                # Try to extract skin number from filename (e.g., "Blood Lord Vladimir" -> parse to get skin ID)
+                # Skin IDs follow the pattern: championId * 1000 + skinNumber
+                # We'll use a heuristic: look for numbers in the path or check against database
+                
+                # Simple heuristic: check if any owned skin ID matches this champion
+                # We'll skip base skins (championId * 1000) since users always "own" them
+                base_skin_id = champion_id * 1000
+                
+                # For now, we'll use a simple approach: extract numeric suffix if present
+                # This is not perfect but will work for many cases
+                is_owned = False
+                
+                # Try to parse skin number from filename patterns like "Champion_17" or "Champion 17"
+                # Look for patterns like "_\d+" or " \d+" at the end of the skin name
+                match = re.search(r'[_\s](\d+)(?:\.|$)', skin_name)
+                if match:
+                    skin_num = int(match.group(1))
+                    potential_skin_id = base_skin_id + skin_num
+                    if potential_skin_id in owned_skin_ids:
+                        is_owned = True
+                        log.debug(f"[PREBUILD] Skipping owned skin: {skin_name} (skinId={potential_skin_id})")
+                
+                if not is_owned:
+                    filtered_skins.append((skin_name, skin_path))
+                else:
+                    skipped_count += 1
+            
+            if skipped_count > 0:
+                log.info(f"[PREBUILD] Filtered out {skipped_count} owned skins for {champion_name}")
+            
+            return filtered_skins
         
         return champion_skins
     
@@ -193,8 +232,8 @@ class ChampionPreBuilder:
         
         return result
     
-    def prebuild_champion_skins(self, champion_name: str) -> bool:
-        """Pre-build all mkoverlay files for a champion"""
+    def prebuild_champion_skins(self, champion_name: str, champion_id: int = None, owned_skin_ids: set = None) -> bool:
+        """Pre-build all mkoverlay files for a champion, excluding owned skins"""
         # Clear any previous cancellation flag
         self.cancel_requested.clear()
         
@@ -211,15 +250,15 @@ class ChampionPreBuilder:
             cleanup_thread = threading.Thread(target=cleanup_background, daemon=True)
             cleanup_thread.start()
             
-            # Find all skins for this champion
-            champion_skins = self.find_champion_skins(champion_name)
+            # Find all unowned skins for this champion
+            champion_skins = self.find_champion_skins(champion_name, champion_id, owned_skin_ids)
             if not champion_skins:
-                log.warning(f"[PREBUILD] No skins found for {champion_name}")
+                log.warning(f"[PREBUILD] No unowned skins found for {champion_name}")
                 return False
             
             # Get recommended thread count
             max_workers = self.get_recommended_threads(champion_name)
-            log.info(f"[PREBUILD] Starting pre-build for {champion_name} with {len(champion_skins)} skins using {max_workers} threads")
+            log.info(f"[PREBUILD] Starting pre-build for {champion_name} with {len(champion_skins)} unowned skins using {max_workers} threads")
             
             # Store current champion
             self.current_champion = champion_name
