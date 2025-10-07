@@ -79,15 +79,12 @@ class ChampThread(threading.Thread):
                         except Exception as e:
                             log.warning(f"[lock:champ] Error fetching owned skins: {e}")
                         
-                        # Trigger pre-building when a new champion is locked
+                        # Notify injection manager of champion lock
                         if self.injection_manager:
                             try:
-                                log.info(f"[lock:champ] Triggering pre-build for {nm}")
                                 self.injection_manager.on_champion_locked(nm, locked, self.state.owned_skin_ids)
                             except Exception as e:
-                                log.error(f"[lock:champ] Failed to start pre-build for {nm}: {e}")
-                        else:
-                            log.warning(f"[lock:champ] No injection manager available for pre-build trigger")
+                                log.error(f"[lock:champ] Failed to notify injection manager: {e}")
                     
                     # Always update the state, even for the same champion
                     self.state.locked_champ_id = locked

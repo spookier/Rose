@@ -16,8 +16,7 @@ from utils.normalization import normalize_text
 from constants import (
     TIMER_HZ_MIN, TIMER_HZ_MAX, TIMER_POLL_PERIOD_S,
     SKIN_THRESHOLD_MS_DEFAULT, HOVER_BUFFER_FILE,
-    BASE_SKIN_VERIFICATION_WAIT_S,
-    FORCE_TRADITIONAL_INJECTION
+    BASE_SKIN_VERIFICATION_WAIT_S
 )
 
 log = get_logger()
@@ -192,8 +191,7 @@ class LoadoutTicker(threading.Thread):
                                 champ_id = self.state.locked_champ_id or self.state.hovered_champ_id
                                 if champ_id and lcu_skin_id is not None and lcu_skin_id != (champ_id * 1000):
                                     base_skin_id = champ_id * 1000
-                                    log.info(f"[inject] User has non-base skin selected (LCU skinId={lcu_skin_id})")
-                                    log.info(f"[inject] Forcing base skin selection (skinId={base_skin_id}) for injection...")
+                                    log.info(f"[inject] Forcing base skin (skinId={base_skin_id}, was {lcu_skin_id})")
                                     
                                     base_skin_set_successfully = False
                                     
@@ -215,53 +213,40 @@ class LoadoutTicker(threading.Thread):
                                                     
                                                     # Try action-based approach first if not completed
                                                     if not is_action_completed:
-                                                        log.info(f"[inject] Found pick action (id={action_id}), setting skin to base...")
-                                                        
                                                         if action_id is not None:
                                                             if self.lcu.set_selected_skin(action_id, base_skin_id):
-                                                                log.info(f"[inject] ✓ Action-based skin change successful")
+                                                                log.info(f"[inject] ✓ Base skin forced via action")
                                                                 base_skin_set_successfully = True
                                                             else:
-                                                                log.warning(f"[inject] ✗ Action-based skin change failed")
-                                                        else:
-                                                            log.warning(f"[inject] ✗ No action ID found")
-                                                    else:
-                                                        log.info(f"[inject] Pick action already completed (champion locked)")
+                                                                log.debug(f"[inject] Action-based approach failed")
                                                     break
                                             if action_found:
                                                 break
                                         
-                                        # If action is completed or action-based approach failed, try my-selection endpoint
+                                        # If action-based approach failed, try my-selection endpoint
                                         if not base_skin_set_successfully:
-                                            log.info(f"[inject] Trying my-selection endpoint...")
                                             if self.lcu.set_my_selection_skin(base_skin_id):
-                                                log.info(f"[inject] ✓ My-selection skin change successful")
+                                                log.info(f"[inject] ✓ Base skin forced via my-selection")
                                                 base_skin_set_successfully = True
                                             else:
-                                                log.warning(f"[inject] ✗ My-selection skin change failed")
+                                                log.warning(f"[inject] ✗ Failed to force base skin")
                                         
                                         # Verify the change was applied
                                         if base_skin_set_successfully:
-                                            time.sleep(BASE_SKIN_VERIFICATION_WAIT_S)  # Wait for LCU to process the change
+                                            time.sleep(BASE_SKIN_VERIFICATION_WAIT_S)
                                             verify_sess = self.lcu.session() or {}
                                             verify_team = verify_sess.get("myTeam") or []
                                             for player in verify_team:
                                                 if player.get("cellId") == my_cell:
                                                     current_skin = player.get("selectedSkinId")
-                                                    if current_skin == base_skin_id:
-                                                        log.info(f"[inject] ✓ Verified: base skin selection successful (skinId={current_skin})")
-                                                    else:
-                                                        log.warning(f"[inject] ✗ Warning: skin still shows as {current_skin}, expected {base_skin_id}")
-                                                        log.warning(f"[inject] ⚠ Injection may fail - injector requires base skin to be selected")
+                                                    if current_skin != base_skin_id:
+                                                        log.warning(f"[inject] Base skin verification failed: {current_skin} != {base_skin_id}")
                                                     break
                                         else:
-                                            log.warning(f"[inject] ⚠ Failed to force base skin - injection may not work correctly")
-                                            log.warning(f"[inject] ⚠ Injector requires base skin selection to work properly")
+                                            log.warning(f"[inject] Failed to force base skin - injection may fail")
                                             
                                     except Exception as e:
                                         log.error(f"[inject] ✗ Error forcing base skin: {e}")
-                                
-                                log.info(f"[inject] starting injection for: {name}")
                                 
                                 # Track if we've been in InProgress phase
                                 has_been_in_progress = False
@@ -274,41 +259,19 @@ class LoadoutTicker(threading.Thread):
                                     # Only stop after we've been in InProgress and then left it
                                     return has_been_in_progress and self.state.phase != "InProgress"
                                 
-                                # Check if we have a pre-built overlay available
-                                champ_id = self.state.locked_champ_id or self.state.hovered_champ_id
-                                champion_name = self.db.champ_name_by_id.get(champ_id or -1, "") if self.db else ""
+                                # Inject skin
+                                log.info(f"[inject] Starting injection: {name}")
+                                success = self.injection_manager.inject_skin_immediately(name, stop_callback=game_ended_callback)
                                 
-                                if champion_name and self.injection_manager.prebuilder and not FORCE_TRADITIONAL_INJECTION:
-                                    # Check if pre-built overlay exists for this skin
-                                    prebuilt_overlay_path = self.injection_manager.prebuilder.get_prebuilt_overlay_path(champion_name, name)
-                                    
-                                    if prebuilt_overlay_path and prebuilt_overlay_path.exists():
-                                        log.info(f"[inject] Using pre-built overlay for {name}")
-                                        # Use pre-built injection (no need for stop_callback since it's instant)
-                                        success = self.injection_manager.inject_prebuilt_skin(champion_name, name)
-                                    else:
-                                        # Pre-built overlay not ready - cancel prebuild and use traditional injection
-                                        log.info(f"[inject] Pre-built overlay not ready for {name} at T={SKIN_THRESHOLD_MS_DEFAULT}ms")
-                                        log.info(f"[inject] Cancelling prebuild and using traditional injection")
-                                        
-                                        # Cancel the ongoing prebuild to free up CPU for game opening
-                                        try:
-                                            self.injection_manager.prebuilder.cancel_current_build()
-                                        except Exception as e:
-                                            log.debug(f"[inject] Failed to cancel prebuild: {e}")
-                                        
-                                        success = self.injection_manager.inject_skin_immediately(name, stop_callback=game_ended_callback)
-                                else:
-                                    log.info(f"[inject] No champion name or pre-builder available, using traditional injection for {name}")
-                                    # Fallback to traditional injection
-                                    success = self.injection_manager.inject_skin_immediately(name, stop_callback=game_ended_callback)
+                                # Set flag to prevent OCR from restarting (even if processes errored)
+                                self.state.injection_completed = True
+                                
                                 if success:
-                                    log.info(f"[inject] successfully injected: {name}")
-                                    # Set flag to prevent OCR from restarting
-                                    self.state.injection_completed = True
-                                    log.info("Injection: Overlay process will continue running until game ends (EndOfGame phase)")
+                                    log.info(f"[inject] Injection process completed for: {name}")
+                                    log.info(f"[inject] ⚠ Verify in-game - timing determines if skin appears")
                                 else:
-                                    log.error(f"[inject] failed to inject: {name}")
+                                    log.error(f"[inject] ✗ Injection process encountered errors: {name}")
+                                    log.error(f"[inject] Skin will likely NOT appear in-game")
                             except Exception as e:
                                 log.error(f"[inject] injection error: {e}")
                         else:

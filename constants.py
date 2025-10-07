@@ -125,13 +125,9 @@ FALLBACK_LOADOUT_MS_DEFAULT = 0      # Deprecated: fallback countdown duration
 SKIN_THRESHOLD_MS_DEFAULT = 500      # Time before loadout ends to write skin (ms)
 INJECTION_THRESHOLD_SECONDS = 2.0    # Seconds between injection attempts
 BASE_SKIN_VERIFICATION_WAIT_S = 0.15 # Seconds to wait for LCU to process base skin change
-# Note: PREBUILD_WAIT_TIMEOUT removed - if prebuild not ready at threshold, cancel it and use traditional injection
-
-# Testing flags
-FORCE_TRADITIONAL_INJECTION = True  # Set to True to test late injection without prebuild
 
 # Game delay strategies (if natural CPU contention is insufficient)
-ENABLE_GAME_SUSPENSION = False       # Set to True to suspend game process during late injection (RISKY)
+ENABLE_GAME_SUSPENSION = True        # Set to True to suspend game process during late injection (RISKY)
 ENABLE_PRIORITY_BOOST = True         # Set to True to boost injection priority for more CPU contention (SAFER)
 
 
@@ -163,8 +159,8 @@ RATE_LIMIT_BACKOFF_MULTIPLIER = 1.5  # Multiply interval by this when low
 # LOGGING CONSTANTS
 # =============================================================================
 
-LOG_MAX_FILES_DEFAULT = 20               # Maximum number of log files to keep
-LOG_MAX_TOTAL_SIZE_MB_DEFAULT = 100      # Maximum total log size in MB
+LOG_MAX_FILES_DEFAULT = 10               # Maximum number of log files to keep
+LOG_MAX_TOTAL_SIZE_MB_DEFAULT = 10       # Maximum total log size in MB
 LOG_CHUNK_SIZE = 8192                    # Chunk size for file downloads
 
 
@@ -187,8 +183,6 @@ DATA_DRAGON_API_TIMEOUT_S = 8           # Timeout for Data Dragon API requests
 GITHUB_API_TIMEOUT_S = 30               # Already defined as RATE_LIMIT_REQUEST_TIMEOUT
 
 # Polling timeouts (seconds)
-PREBUILD_POLL_INTERVAL_S = 0.1          # Interval to check prebuild completion status
-PREBUILD_CANCEL_CHECK_TIMEOUT_S = 0.1   # Timeout for future.wait() to check cancellation
 FUTURE_RESULT_TIMEOUT_S = 0             # Timeout for future.result() (immediate)
 
 
@@ -315,51 +309,3 @@ DEFAULT_DOWNLOAD_SKINS = True
 DEFAULT_FORCE_UPDATE_SKINS = False
 
 
-# =============================================================================
-# THREAD RECOMMENDATIONS
-# =============================================================================
-
-# Champions that should use 2 threads (performance degrades with 3 threads)
-# Based on comprehensive 2 vs 3 thread performance testing
-CHAMPIONS_USE_2_THREADS = {
-    'Shaco',      # 0.47x speedup - severe degradation
-    'Aatrox',     # 0.86x speedup - significant slowdown
-    'Aurora',     # 1.03x speedup - minimal benefit
-    'Hwei',       # 1.07x speedup - minimal benefit  
-    'Milio',      # 1.00x speedup - no benefit
-    'Yunara',     # 1.08x speedup - minimal benefit
-    'Briar',      # 1.10x speedup - minimal benefit
-}
-
-# Champions that should use 3 threads (strong performance improvement)
-# Based on comprehensive 2 vs 3 thread performance testing
-CHAMPIONS_USE_3_THREADS = {
-    # Strongly recommend 3 threads (1.30x+ speedup)
-    'Zoe', 'Vel\'Koz', 'Maokai', 'Amumu', 'Rammus', 'Swain', 'Zyra', 'Syndra', 'Zed',
-    'Akshan', 'Dr. Mundo', 'Karthus', 'Taliyah', 'Trundle', 'Zac', 'Zeri', 'Malzahar',
-    'Nocturne', 'Viktor', 'Yorick', 'Ziggs', 'Corki', 'Fizz', 'Lulu', 'Nunu & Willump',
-    'Rek\'Sai', 'Samira', 'Cassiopeia', 'Ekko', 'K\'Sante', 'Alistar', 'Kog\'Maw',
-    'LeBlanc', 'Soraka', 'Aurelion Sol', 'Camille', 'Kalista', 'Kayn', 'Olaf', 'Poppy',
-    'Twitch', 'Urgot', 'Vex', 'Azir', 'Gragas', 'Illaoi', 'Kled', 'Yuumi', 'Caitlyn',
-    'Elise', 'Fiddlesticks', 'Renekton', 'Xin Zhao', 'Bel\'Veth', 'Darius', 'Garen',
-    'Kennen', 'Lillia', 'Rakan', 'Sett', 'Warwick',
-    
-    # Recommend 3 threads (1.10x-1.30x speedup)  
-    'Aphelios', 'Braum', 'Gnar', 'Karma', 'Lee Sin', 'Malphite', 'Mordekaiser', 'Neeko',
-    'Pantheon', 'Rengar', 'Wukong', 'Diana', 'Janna', 'Naafiri', 'Ornn', 'Tahm Kench',
-    'Xayah', 'Xerath', 'Cho\'Gath', 'Nilah', 'Rumble', 'Singed', 'Skarner', 'Thresh',
-    'Yasuo', 'Jax', 'Morgana', 'Nidalee', 'Seraphine', 'Shyvana', 'Talon', 'Tryndamere',
-    'Viego', 'Volibear', 'Ezreal', 'Fiora', 'Graves', 'Gwen', 'Jayce', 'Jhin', 'Lux',
-    'Nautilus', 'Pyke', 'Teemo', 'Leona', 'Lissandra', 'Miss Fortune', 'Nasus', 'Qiyana',
-    'Renata Glasc', 'Senna', 'Sion', 'Draven', 'Vi', 'Annie', 'Ashe', 'Evelynn',
-    'Gangplank', 'Hecarim', 'Heimerdinger', 'Kassadin', 'Katarina', 'Master Yi',
-    'Orianna', 'Quinn', 'Taric', 'Twisted Fate', 'Veigar', 'Ambessa', 'Anivia',
-    'Blitzcrank', 'Galio', 'Ivern', 'Kai\'Sa', 'Kayle', 'Kindred', 'Jarvan IV',
-    'Jinx', 'Riven', 'Shen', 'Yone', 'Bard', 'Kha\'Zix', 'Nami', 'Sejuani',
-    'Vladimir', 'Zilean', 'Sivir', 'Sylas', 'Tristana', 'Brand', 'Rell', 'Udyr',
-    'Akali', 'Ahri', 'Irelia', 'Lucian', 'Sona', 'Vayne', 'Smolder', 'Varus',
-    'Mel', 'Ryze'
-}
-
-# Default thread count for unknown champions
-DEFAULT_THREAD_COUNT = 3  # Most champions benefit from 3 threads

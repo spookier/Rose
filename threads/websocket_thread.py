@@ -116,20 +116,6 @@ class WSEventThread(threading.Thread):
                             log.info("WS: Killed all runoverlay processes for Lobby")
                         except Exception as e:
                             log.warning(f"WS: Failed to kill runoverlay processes: {e}")
-                        
-                        # Cancel any ongoing prebuild from previous session
-                        try:
-                            if self.injection_manager._initialized and self.injection_manager.prebuilder:
-                                if self.injection_manager.current_champion:
-                                    log.info(f"WS: Cancelling prebuild for {self.injection_manager.current_champion} (entering Lobby)")
-                                    self.injection_manager.prebuilder.cancel_current_build()
-                                    self.injection_manager.current_champion = None
-                                
-                                # Clean up all pre-built overlays
-                                self.injection_manager.cleanup_prebuilt_overlays()
-                                log.info("WS: Cleaned up all pre-built overlays for Lobby")
-                        except Exception as e:
-                            log.warning(f"WS: Failed to cleanup pre-builds: {e}")
                 
                 elif ph == "ChampSelect":
                     self.state.last_hovered_skin_key = None
@@ -241,15 +227,12 @@ class WSEventThread(threading.Thread):
                     except Exception as e:
                         log.warning(f"[lock:champ] Error fetching owned skins: {e}")
                     
-                    # Trigger pre-building when a new champion is locked
+                    # Notify injection manager of champion lock
                     if self.injection_manager:
                         try:
-                            log.info(f"[lock:champ] Triggering pre-build for {champ_label}")
                             self.injection_manager.on_champion_locked(champ_label, ch, self.state.owned_skin_ids)
                         except Exception as e:
-                            log.error(f"[lock:champ] Failed to start pre-build for {champ_label}: {e}")
-                    else:
-                        log.warning(f"[lock:champ] No injection manager available for pre-build trigger")
+                            log.error(f"[lock:champ] Failed to notify injection manager: {e}")
             
             for cid in removed:
                 ch = self.state.locks_by_cell.get(cid, 0)

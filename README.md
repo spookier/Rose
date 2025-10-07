@@ -127,13 +127,12 @@ While you play, SkinCloner operates through a sophisticated multi-threaded syste
 1. **Phase Detection**: Monitors League Client for game phases (lobby, champion select, in-game)
 2. **OCR Activation**: Automatically activates OCR when entering champion select
 3. **Champion Lock Detection**: Detects when you lock a champion and fetches your owned skins from LCU
-4. **Smart Pre-Building**: Pre-builds overlay files **only for unowned skins** of your locked champion in parallel (optimized based on your inventory)
-5. **Real-Time Skin Detection**: Uses advanced OCR to detect skin names as you hover over them during champion select
-6. **Ownership Verification**: Automatically skips injection if you already own the detected skin
-7. **Base Skin Forcing**: Forces base skin selection before injection (required for proper skin overlay)
-8. **Instant Injection**: Injects the last hovered unowned skin 500 milliseconds before game starts using pre-built overlays (<100 milliseconds injection time)
+4. **Real-Time Skin Detection**: Uses advanced OCR to detect skin names as you hover over them during champion select
+5. **Ownership Verification**: Automatically skips injection if you already own the detected skin
+6. **Base Skin Forcing**: Forces base skin selection before injection (required for proper skin overlay)
+7. **Automatic Injection**: Injects the last hovered unowned skin 500 milliseconds before game starts with CPU priority boost for reliability
 
-**Performance**: Pre-building allows near-instant skin injection instead of the traditional 2 second wait. The system intelligently filters owned skins to reduce pre-build time and only injects skins you don't own.
+**Performance**: The system uses high-priority injection processes to ensure completion before game launch, even with CPU contention. Only injects skins you don't own.
 
 **No manual intervention required - just launch the app and play!**
 
@@ -143,8 +142,7 @@ While you play, SkinCloner operates through a sophisticated multi-threaded syste
 
 - **🎯 Fully Automated**: Works completely automatically - no manual intervention required
 - **🔍 Advanced OCR Detection**: Uses Tesseract OCR with optimized image processing for accurate skin name recognition
-- **⚡ Instant Injection**: Pre-builds overlays on champion lock for near-instant injection (<100 milliseconds) 500 milliseconds before game starts
-- **🚀 Smart Pre-Building**: Only pre-builds unowned skins by checking LCU inventory - saves time and resources
+- **⚡ Optimized Injection**: Uses high-priority processes for reliable injection 500 milliseconds before game starts
 - **✅ Ownership Detection**: Automatically detects owned skins and skips injection to avoid conflicts
 - **🔄 Base Skin Forcing**: Intelligently forces base skin selection before injection
 - **🌍 Multi-Language Support**: Supports many languages with automatic detection
@@ -159,7 +157,7 @@ While you play, SkinCloner operates through a sophisticated multi-threaded syste
 - **🛠️ CSLOL Tools**: Reliable injection using proven CSLOL modification tools
 - **📈 Optimized Loading**: Only loads necessary language databases for better performance
 - **🔒 Permission-Safe**: Uses user data directories to avoid permission issues
-- **🎮 Inventory-Aware**: Fetches owned skins from LCU to optimize pre-building and prevent unnecessary injections
+- **🎮 Inventory-Aware**: Fetches owned skins from LCU to prevent unnecessary injections
 
 ### Advanced Features
 
@@ -177,9 +175,9 @@ While you play, SkinCloner operates through a sophisticated multi-threaded syste
 - **🎯 ROI Locking**: Intelligent region-of-interest detection and locking
 - **🔄 Adaptive Timing**: Dynamic timing adjustments based on system performance
 - **📊 Rate Limiting**: Intelligent GitHub API rate limiting for skin downloads
-- **🎭 Smart Filtering**: Pre-builds only unowned skins by filtering against LCU inventory
+- **🎭 Smart Filtering**: Only injects unowned skins by filtering against LCU inventory
 - **🔧 Robust Fallbacks**: Multiple LCU endpoints for reliable base skin forcing
-- **🧹 Automatic Cleanup**: Cleans up pre-built overlays and processes when entering lobby to manage disk space
+- **🧹 Automatic Cleanup**: Cleans up injection processes when entering lobby
 
 ---
 
@@ -195,7 +193,6 @@ SkinCloner/
 ├── injection/                    # Skin injection system
 │   ├── injector.py               # CSLOL injection logic
 │   ├── manager.py                # Injection management and coordination
-│   ├── prebuilder.py             # Intelligent pre-building system for instant injection
 │   ├── mods_map.json             # Mod configuration mapping
 │   └── tools/                    # CSLOL modification tools
 │       ├── mod-tools.exe         # Main modification tool

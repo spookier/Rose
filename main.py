@@ -488,13 +488,6 @@ def main():
             t_ws.join(timeout=THREAD_JOIN_TIMEOUT_S)
         t_lcu_monitor.join(timeout=THREAD_JOIN_TIMEOUT_S)
         
-        # Clean up pre-built overlays
-        if injection_manager:
-            try:
-                injection_manager.cleanup_prebuilt_overlays()
-                log.info("Cleaned up pre-built overlays")
-            except Exception as e:
-                log.warning(f"Error cleaning up pre-built overlays: {e}")
         
         # Clean up lock file on exit
         cleanup_lock_file()
