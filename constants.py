@@ -122,8 +122,10 @@ TIMER_POLL_PERIOD_S = 0.2            # Seconds between LCU resync checks
 FALLBACK_LOADOUT_MS_DEFAULT = 0      # Deprecated: fallback countdown duration
 
 # Skin injection timing
-SKIN_THRESHOLD_MS_DEFAULT = 200      # Time before loadout ends to write skin (ms)
+SKIN_THRESHOLD_MS_DEFAULT = 500      # Time before loadout ends to write skin (ms)
 INJECTION_THRESHOLD_SECONDS = 2.0    # Seconds between injection attempts
+BASE_SKIN_VERIFICATION_WAIT_S = 0.15 # Seconds to wait for LCU to process base skin change
+PREBUILD_WAIT_TIMEOUT_S = 0.2        # Seconds to wait for prebuild completion at injection time (must be < threshold - verification time)
 
 
 # =============================================================================
@@ -157,6 +159,53 @@ RATE_LIMIT_BACKOFF_MULTIPLIER = 1.5  # Multiply interval by this when low
 LOG_MAX_FILES_DEFAULT = 20               # Maximum number of log files to keep
 LOG_MAX_TOTAL_SIZE_MB_DEFAULT = 100      # Maximum total log size in MB
 LOG_CHUNK_SIZE = 8192                    # Chunk size for file downloads
+
+
+# =============================================================================
+# PROCESS & THREAD TIMEOUT CONSTANTS
+# =============================================================================
+
+# Process termination timeouts (seconds)
+PROCESS_TERMINATE_TIMEOUT_S = 5         # Timeout for process.wait() after terminate/kill
+MKOVERLAY_PROCESS_TIMEOUT_S = 60        # Timeout for mkoverlay process execution
+THREAD_JOIN_TIMEOUT_S = 1.0             # Timeout for thread.join() on shutdown
+
+# API request timeouts (seconds)
+LCU_API_TIMEOUT_S = 2.0                 # Timeout for LCU API requests
+DATA_DRAGON_API_TIMEOUT_S = 8           # Timeout for Data Dragon API requests
+GITHUB_API_TIMEOUT_S = 30               # Already defined as RATE_LIMIT_REQUEST_TIMEOUT
+
+# Polling timeouts (seconds)
+PREBUILD_POLL_INTERVAL_S = 0.1          # Interval to check prebuild completion status
+PREBUILD_CANCEL_CHECK_TIMEOUT_S = 0.1   # Timeout for future.wait() to check cancellation
+FUTURE_RESULT_TIMEOUT_S = 0             # Timeout for future.result() (immediate)
+
+
+# =============================================================================
+# SLEEP & DELAY CONSTANTS
+# =============================================================================
+
+# General sleep intervals (seconds)
+TRAY_INIT_SLEEP_S = 0.2                 # Sleep after tray icon initialization
+PROCESS_MONITOR_SLEEP_S = 0.5           # Sleep during process monitoring loop
+WINDOW_CHECK_SLEEP_S = 1                # Sleep between window existence checks
+API_POLITENESS_DELAY_S = 0.5            # Delay between API calls to be polite
+
+
+# =============================================================================
+# SYSTEM TRAY CONSTANTS
+# =============================================================================
+
+# Tray icon initialization
+TRAY_READY_MAX_WAIT_S = 5.0             # Maximum time to wait for tray icon to be ready
+TRAY_READY_CHECK_INTERVAL_S = 0.1       # Interval to check if tray icon is ready
+TRAY_THREAD_JOIN_TIMEOUT_S = 2.0        # Timeout for tray thread join on shutdown
+
+# Tray icon dimensions
+TRAY_ICON_WIDTH = 128                   # Tray icon width in pixels
+TRAY_ICON_HEIGHT = 128                  # Tray icon height in pixels
+TRAY_ICON_ELLIPSE_COORDS = [16, 16, 112, 112]  # Ellipse coordinates for icon
+TRAY_ICON_BORDER_WIDTH = 4              # Border width for icon ellipse
 
 
 # =============================================================================

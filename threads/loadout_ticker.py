@@ -15,7 +15,8 @@ from utils.logging import get_logger
 from utils.normalization import normalize_text
 from constants import (
     TIMER_HZ_MIN, TIMER_HZ_MAX, TIMER_POLL_PERIOD_S,
-    SKIN_THRESHOLD_MS_DEFAULT, HOVER_BUFFER_FILE
+    SKIN_THRESHOLD_MS_DEFAULT, HOVER_BUFFER_FILE,
+    BASE_SKIN_VERIFICATION_WAIT_S, PREBUILD_WAIT_TIMEOUT_S
 )
 
 log = get_logger()
@@ -240,7 +241,7 @@ class LoadoutTicker(threading.Thread):
                                         
                                         # Verify the change was applied
                                         if base_skin_set_successfully:
-                                            time.sleep(0.5)  # Wait for LCU to process the change
+                                            time.sleep(BASE_SKIN_VERIFICATION_WAIT_S)  # Wait for LCU to process the change
                                             verify_sess = self.lcu.session() or {}
                                             verify_team = verify_sess.get("myTeam") or []
                                             for player in verify_team:
@@ -287,7 +288,7 @@ class LoadoutTicker(threading.Thread):
                                     else:
                                         # Pre-built overlay not ready yet, wait briefly for completion
                                         log.info(f"[inject] Pre-built overlay not ready for {name}, waiting for completion...")
-                                        if self.injection_manager.prebuilder.wait_for_prebuild_completion(champion_name, timeout=2.0):
+                                        if self.injection_manager.prebuilder.wait_for_prebuild_completion(champion_name, timeout=PREBUILD_WAIT_TIMEOUT_S):
                                             # Check again after waiting
                                             prebuilt_overlay_path = self.injection_manager.prebuilder.get_prebuilt_overlay_path(champion_name, name)
                                             if prebuilt_overlay_path and prebuilt_overlay_path.exists():

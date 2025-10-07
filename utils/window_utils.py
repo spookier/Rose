@@ -11,6 +11,7 @@ import sys
 import ctypes
 from ctypes import wintypes
 from typing import Optional, Tuple
+from constants import WINDOW_CHECK_SLEEP_S
 
 
 def is_windows() -> bool:
@@ -232,7 +233,7 @@ def monitor_league_window():
                 print("League of Legends window not found")
             
             # Wait 1 second before next check
-            time.sleep(1)
+            time.sleep(WINDOW_CHECK_SLEEP_S)
             
     except KeyboardInterrupt:
         print("\nMonitoring stopped.")

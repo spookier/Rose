@@ -290,7 +290,7 @@ def main():
         log.info("System tray icon initialized - console hidden")
         
         # Give tray icon a moment to fully initialize
-        time.sleep(0.2)
+        time.sleep(TRAY_INIT_SLEEP_S)
     except Exception as e:
         log.warning(f"Failed to initialize system tray: {e}")
         log.info("Application will continue without system tray icon")
@@ -480,13 +480,13 @@ def main():
                 log.warning(f"Error stopping system tray: {e}")
         
         # Stop all threads
-        t_phase.join(timeout=1.0)
+        t_phase.join(timeout=THREAD_JOIN_TIMEOUT_S)
         if t_champ: 
-            t_champ.join(timeout=1.0)
-        t_ocr.join(timeout=1.0)
+            t_champ.join(timeout=THREAD_JOIN_TIMEOUT_S)
+        t_ocr.join(timeout=THREAD_JOIN_TIMEOUT_S)
         if t_ws: 
-            t_ws.join(timeout=1.0)
-        t_lcu_monitor.join(timeout=1.0)
+            t_ws.join(timeout=THREAD_JOIN_TIMEOUT_S)
+        t_lcu_monitor.join(timeout=THREAD_JOIN_TIMEOUT_S)
         
         # Clean up pre-built overlays
         if injection_manager:

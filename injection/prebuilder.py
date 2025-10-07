@@ -18,6 +18,10 @@ from concurrent.futures import ThreadPoolExecutor, CancelledError
 from .injector import SkinInjector
 from utils.paths import get_skins_dir, get_injection_dir
 from utils.logging import get_logger
+from constants import (
+    MKOVERLAY_PROCESS_TIMEOUT_S, PREBUILD_POLL_INTERVAL_S,
+    PREBUILD_CANCEL_CHECK_TIMEOUT_S, FUTURE_RESULT_TIMEOUT_S
+)
 from constants import CHAMPIONS_USE_2_THREADS, CHAMPIONS_USE_3_THREADS, DEFAULT_THREAD_COUNT
 
 log = get_logger()
@@ -275,7 +279,7 @@ class ChampionPreBuilder:
             
             # Create overlay using mkoverlay with thread-specific directories
             # Use the target mod directory name (matches traditional injection)
-            overlay_result = self._mk_overlay_only_thread_isolated(thread_mods_dir, thread_overlay_dir, target_mod_dir.name, timeout=60)
+            overlay_result = self._mk_overlay_only_thread_isolated(thread_mods_dir, thread_overlay_dir, target_mod_dir.name, timeout=MKOVERLAY_PROCESS_TIMEOUT_S)
             
             if overlay_result == 0:
                 result['success'] = True
@@ -372,7 +376,7 @@ class ChampionPreBuilder:
                 try:
                     done, _ = concurrent.futures.wait(
                         future_to_skin.keys(),
-                        timeout=0.1,  # Short timeout to check cancellation frequently
+                        timeout=PREBUILD_CANCEL_CHECK_TIMEOUT_S,  # Short timeout to check cancellation frequently
                         return_when=concurrent.futures.FIRST_COMPLETED
                     )
                     
@@ -384,7 +388,7 @@ class ChampionPreBuilder:
                         skin_name, skin_path = future_to_skin[future]
                         
                         try:
-                            result = future.result(timeout=0)
+                            result = future.result(timeout=FUTURE_RESULT_TIMEOUT_S)
                             if result['success']:
                                 successful_builds += 1
                                 log.debug(f"[PREBUILD] OK {skin_name}")
@@ -508,5 +512,5 @@ class ChampionPreBuilder:
         while time.time() - start_time < timeout:
             if self.is_prebuild_complete(champion_name):
                 return True
-            time.sleep(0.1)
+            time.sleep(PREBUILD_POLL_INTERVAL_S)
         return False

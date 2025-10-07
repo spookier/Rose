@@ -188,12 +188,12 @@ class OCRSkinThread(threading.Thread):
                 self._ocr_stopped_injection_logged = True
             return False
         
-        # Stop OCR if we're within the injection threshold (200ms)
+        # Stop OCR if we're within the injection threshold (configured via SKIN_THRESHOLD_MS_DEFAULT)
         # Check if loadout countdown is active and within threshold
         if (getattr(self.state, 'loadout_countdown_active', False) and 
             hasattr(self.state, 'current_ticker')):
             
-            # Get the injection threshold (default 200ms = 0.2 seconds)
+            # Get the injection threshold (default 500ms = 0.5 seconds)
             threshold_ms = int(getattr(self.state, 'skin_write_ms', SKIN_THRESHOLD_MS_DEFAULT) or SKIN_THRESHOLD_MS_DEFAULT)
             
             # If we're in the final seconds before injection, stop OCR

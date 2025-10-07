@@ -131,7 +131,7 @@ While you play, SkinCloner operates through a sophisticated multi-threaded syste
 5. **Real-Time Skin Detection**: Uses advanced OCR to detect skin names as you hover over them during champion select
 6. **Ownership Verification**: Automatically skips injection if you already own the detected skin
 7. **Base Skin Forcing**: Forces base skin selection before injection (required for proper skin overlay)
-8. **Instant Injection**: Injects the last hovered unowned skin 200 milliseconds before game starts using pre-built overlays (<100 milliseconds injection time)
+8. **Instant Injection**: Injects the last hovered unowned skin 500 milliseconds before game starts using pre-built overlays (<100 milliseconds injection time)
 
 **Performance**: Pre-building allows near-instant skin injection instead of the traditional 2 second wait. The system intelligently filters owned skins to reduce pre-build time and only injects skins you don't own.
 
@@ -143,7 +143,7 @@ While you play, SkinCloner operates through a sophisticated multi-threaded syste
 
 - **🎯 Fully Automated**: Works completely automatically - no manual intervention required
 - **🔍 Advanced OCR Detection**: Uses Tesseract OCR with optimized image processing for accurate skin name recognition
-- **⚡ Instant Injection**: Pre-builds overlays on champion lock for near-instant injection (<100 milliseconds) 200 milliseconds before game starts
+- **⚡ Instant Injection**: Pre-builds overlays on champion lock for near-instant injection (<100 milliseconds) 500 milliseconds before game starts
 - **🚀 Smart Pre-Building**: Only pre-builds unowned skins by checking LCU inventory - saves time and resources
 - **✅ Ownership Detection**: Automatically detects owned skins and skips injection to avoid conflicts
 - **🔄 Base Skin Forcing**: Intelligently forces base skin selection before injection

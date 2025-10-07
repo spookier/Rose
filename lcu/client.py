@@ -11,6 +11,7 @@ import requests
 from dataclasses import dataclass
 from typing import Optional
 from utils.logging import get_logger
+from constants import LCU_API_TIMEOUT_S
 
 log = get_logger()
 
@@ -234,7 +235,7 @@ class LCU:
             response = self.s.patch(
                 f"{self.base}/lol-champ-select/v1/session/actions/{action_id}",
                 json={"selectedSkinId": skin_id},
-                timeout=2.0
+                timeout=LCU_API_TIMEOUT_S
             )
             if response.status_code in (200, 204):
                 return True
@@ -257,7 +258,7 @@ class LCU:
             response = self.s.patch(
                 f"{self.base}/lol-champ-select/v1/session/my-selection",
                 json={"selectedSkinId": skin_id},
-                timeout=2.0
+                timeout=LCU_API_TIMEOUT_S
             )
             if response.status_code in (200, 204):
                 return True

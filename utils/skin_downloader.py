@@ -15,6 +15,7 @@ from typing import List, Dict, Optional
 from urllib.parse import urljoin, urlparse
 from utils.logging import get_logger
 from utils.paths import get_skins_dir
+from constants import API_POLITENESS_DELAY_S
 
 log = get_logger()
 
@@ -153,7 +154,7 @@ class SkinDownloader:
                     log.info(f"No new skins for {champion}")
                 
                 # Small delay to be respectful to GitHub API
-                time.sleep(0.5)
+                time.sleep(API_POLITENESS_DELAY_S)
                 
             except Exception as e:
                 log.error(f"Error processing {champion}: {e}")

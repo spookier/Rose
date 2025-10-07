@@ -85,11 +85,8 @@ class PhaseThread(threading.Thread):
                         
                     
                 elif ph == "InProgress":
-                    # Game starting → log last skin
-                    if self.state.last_hovered_skin_key:
-                        log.info(f"[launch:last-skin] {self.state.last_hovered_skin_key} (skinId={self.state.last_hovered_skin_id}, champ={self.state.last_hovered_skin_slug})")
-                    else:
-                        log.info("[launch:last-skin] (no hovered skin detected)")
+                    # Game starting (last skin logged by WebSocket thread if enabled)
+                    pass
                 
                 elif ph == "EndOfGame":
                     # Game ended → stop overlay process

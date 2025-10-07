@@ -13,6 +13,11 @@ from typing import Optional, Callable
 import pystray
 from PIL import Image, ImageDraw
 from utils.logging import get_logger
+from constants import (
+    TRAY_READY_MAX_WAIT_S, TRAY_READY_CHECK_INTERVAL_S,
+    TRAY_THREAD_JOIN_TIMEOUT_S, TRAY_ICON_WIDTH, TRAY_ICON_HEIGHT,
+    TRAY_ICON_ELLIPSE_COORDS, TRAY_ICON_BORDER_WIDTH
+)
 
 log = get_logger()
 
@@ -37,13 +42,13 @@ class TrayManager:
     def _create_icon_image(self) -> Image.Image:
         """Create a simple icon image for the tray"""
         # Create a 128x128 icon with a simple design (doubled from 64x64)
-        width, height = 128, 128
+        width, height = TRAY_ICON_WIDTH, TRAY_ICON_HEIGHT
         image = Image.new('RGBA', (width, height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(image)
         
         # Draw a simple "SC" logo (SkinCloner)
         # Background circle (scaled 2x)
-        draw.ellipse([16, 16, 112, 112], fill=(0, 100, 200, 255), outline=(0, 50, 100, 255), width=4)
+        draw.ellipse(TRAY_ICON_ELLIPSE_COORDS, fill=(0, 100, 200, 255), outline=(0, 50, 100, 255), width=TRAY_ICON_BORDER_WIDTH)
         
         # "SC" text
         try:
@@ -234,7 +239,7 @@ class TrayManager:
                 log.error(f"Failed to stop system tray icon: {e}")
         
         if self.tray_thread and self.tray_thread.is_alive():
-            self.tray_thread.join(timeout=2.0)
+            self.tray_thread.join(timeout=TRAY_THREAD_JOIN_TIMEOUT_S)
     
     def is_running(self) -> bool:
         """Check if the tray icon is running"""
@@ -260,8 +265,8 @@ class TrayManager:
             is_downloading: True to show orange dot, False to show green checkmark icon
         """
         # Wait for tray icon to be ready (up to 5 seconds)
-        max_wait = 5.0
-        wait_interval = 0.1
+        max_wait = TRAY_READY_MAX_WAIT_S
+        wait_interval = TRAY_READY_CHECK_INTERVAL_S
         elapsed = 0.0
         
         while (not self.icon or not self._base_icon_image) and elapsed < max_wait:

@@ -14,6 +14,7 @@ import shutil
 
 from utils.logging import get_logger
 from utils.paths import get_skins_dir, get_injection_dir
+from constants import PROCESS_TERMINATE_TIMEOUT_S, PROCESS_MONITOR_SLEEP_S
 
 log = get_logger()
 
@@ -268,7 +269,7 @@ class SkinInjector:
                     log.info("Injector: Terminating overlay process")
                     proc.terminate()
                     try:
-                        proc.wait(timeout=5)
+                        proc.wait(timeout=PROCESS_TERMINATE_TIMEOUT_S)
                     except subprocess.TimeoutExpired:
                         proc.kill()
                         proc.wait()
@@ -280,14 +281,14 @@ class SkinInjector:
                     log.warning("Injector: Overlay timeout, but injection may have succeeded")
                     proc.terminate()
                     try:
-                        proc.wait(timeout=5)
+                        proc.wait(timeout=PROCESS_TERMINATE_TIMEOUT_S)
                     except subprocess.TimeoutExpired:
                         proc.kill()
                         proc.wait()
                     self.current_overlay_process = None
                     return 0  # Return success since injection was likely applied
                 
-                time.sleep(0.5)
+                time.sleep(PROCESS_MONITOR_SLEEP_S)
             
             # Process completed normally
             stdout, _ = proc.communicate()
@@ -540,7 +541,7 @@ class SkinInjector:
                 log.info("Injector: Stopping current overlay process")
                 self.current_overlay_process.terminate()
                 try:
-                    self.current_overlay_process.wait(timeout=5)
+                    self.current_overlay_process.wait(timeout=PROCESS_TERMINATE_TIMEOUT_S)
                 except subprocess.TimeoutExpired:
                     self.current_overlay_process.kill()
                     self.current_overlay_process.wait()

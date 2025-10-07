@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Optional, List, Dict
 from utils.normalization import normalize_text
 from utils.paths import get_user_data_dir
+from constants import DATA_DRAGON_API_TIMEOUT_S
 
 
 # Use user data directory for cache to avoid permission issues
@@ -54,7 +55,7 @@ class NameDB:
             except Exception: 
                 pass
         
-        r = requests.get(url, timeout=8)
+        r = requests.get(url, timeout=DATA_DRAGON_API_TIMEOUT_S)
         r.raise_for_status()
         data = r.json()
         json.dump(data, open(p, "w", encoding="utf-8"))
