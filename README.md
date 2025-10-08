@@ -2,7 +2,7 @@
 
 **League of Legends Skin Changer with Advanced OCR Detection**
 
-SkinCloner is a fully automated system that detects skin selections in League of Legends champion select using advanced OCR technology and automatically injects custom skins 3 seconds before the game starts. Built with a modular architecture and multi-language support, it provides a seamless experience for League of Legends players.
+SkinCloner is a fully automated system that detects skin selections in League of Legends champion select using advanced OCR technology and automatically injects custom skins 500 milliseconds before the game starts. Built with a modular architecture, unified game process monitoring, and multi-language support, it provides a seamless experience for League of Legends players.
 
 ## 🔧 Prerequisites
 
@@ -132,7 +132,13 @@ While you play, SkinCloner operates through a sophisticated multi-threaded syste
 6. **Base Skin Forcing**: Forces base skin selection before injection (required for proper skin overlay)
 7. **Automatic Injection**: Injects the last hovered unowned skin 500 milliseconds before game starts with CPU priority boost for reliability
 
-**Performance**: The system uses high-priority injection processes to ensure completion before game launch, even with CPU contention. Only injects skins you don't own.
+**Performance & Reliability**:
+
+- **Process Suspension**: Game process is suspended during injection to ensure reliable overlay installation
+- **High-Priority Processing**: Uses CPU priority boost for mkoverlay and runoverlay processes
+- **Safety Mechanisms**: 20-second auto-resume timeout prevents game from being stuck frozen
+- **Smart Injection**: Only injects skins you don't own, verified against LCU inventory
+- **Robust Fallbacks**: Multiple LCU endpoints ensure base skin forcing works reliably
 
 **No manual intervention required - just launch the app and play!**
 
@@ -142,9 +148,10 @@ While you play, SkinCloner operates through a sophisticated multi-threaded syste
 
 - **🎯 Fully Automated**: Works completely automatically - no manual intervention required
 - **🔍 Advanced OCR Detection**: Uses Tesseract OCR with optimized image processing for accurate skin name recognition
-- **⚡ Optimized Injection**: Uses high-priority processes for reliable injection 500 milliseconds before game starts
-- **✅ Ownership Detection**: Automatically detects owned skins and skips injection to avoid conflicts
-- **🔄 Base Skin Forcing**: Intelligently forces base skin selection before injection
+- **⚡ Optimized Injection**: Uses high-priority processes and game suspension for reliable injection 500ms before game starts
+- **✅ Ownership Detection**: Automatically detects owned skins via LCU inventory and skips injection to avoid conflicts
+- **🔄 Base Skin Forcing**: Intelligently forces base skin selection before injection with multiple fallback endpoints
+- **🎮 Unified Game Monitor**: Single, efficient monitor handles game process suspension and resume
 - **🌍 Multi-Language Support**: Supports many languages with automatic detection
 - **📊 Massive Skin Collection**: 8,277+ skins for 171 champions included
 - **🧠 Smart Matching**: Advanced fuzzy matching algorithms for accurate skin detection
@@ -152,12 +159,13 @@ While you play, SkinCloner operates through a sophisticated multi-threaded syste
 ### Technical Features
 
 - **🏗️ Modular Architecture**: Clean, maintainable codebase with separated concerns
-- **🧵 Multi-threaded Design**: Optimal performance with concurrent processing
+- **🧵 Multi-threaded Design**: Optimal performance with concurrent processing (6 specialized threads)
 - **🔄 LCU Integration**: Real-time communication with League Client API (with fallback endpoints for robustness)
 - **🛠️ CSLOL Tools**: Reliable injection using proven CSLOL modification tools
 - **📈 Optimized Loading**: Only loads necessary language databases for better performance
 - **🔒 Permission-Safe**: Uses user data directories to avoid permission issues
 - **🎮 Inventory-Aware**: Fetches owned skins from LCU to prevent unnecessary injections
+- **⚡ Process Management**: Unified monitor with game suspension, priority boost, and safety timeouts
 
 ### Advanced Features
 
@@ -170,14 +178,60 @@ While you play, SkinCloner operates through a sophisticated multi-threaded syste
 
 ### Performance Optimizations
 
-- **⚡ Burst OCR**: High-frequency OCR during motion/hover detection
-- **💤 Idle Optimization**: Reduced OCR frequency when inactive
+- **⚡ Burst OCR**: High-frequency OCR (50 Hz) during motion/hover detection
+- **💤 Idle Optimization**: Reduced OCR frequency when inactive to save CPU
 - **🎯 ROI Locking**: Intelligent region-of-interest detection and locking
 - **🔄 Adaptive Timing**: Dynamic timing adjustments based on system performance
 - **📊 Rate Limiting**: Intelligent GitHub API rate limiting for skin downloads
 - **🎭 Smart Filtering**: Only injects unowned skins by filtering against LCU inventory
 - **🔧 Robust Fallbacks**: Multiple LCU endpoints for reliable base skin forcing
 - **🧹 Automatic Cleanup**: Cleans up injection processes when entering lobby
+- **⚙️ Unified Monitor**: Single monitor eliminates race conditions and reduces complexity
+
+---
+
+## 🏗️ Architecture Highlights
+
+### Unified Game Monitor System
+
+SkinCloner uses a **single, unified monitor** for game process management, eliminating race conditions and complexity:
+
+**Monitor Lifecycle:**
+
+1. **Start**: Monitor activates when injection begins
+2. **Watch**: Continuously scans for `League of Legends.exe` process
+3. **Suspend**: Immediately suspends game when found to freeze loading
+4. **Hold**: Keeps game suspended during mkoverlay (skin preparation)
+5. **Resume**: Releases game when runoverlay starts (allows game to load while overlay hooks in)
+6. **Safety**: Auto-resumes after 20s if injection stalls (prevents permanent freeze)
+
+**Benefits:**
+
+- ✅ **No Race Conditions**: Single source of truth for game state
+- ✅ **Reliable Timing**: Ensures injection completes before game finishes loading
+- ✅ **Fail-Safe**: Multiple safety mechanisms prevent game from being stuck
+
+### In-Memory State Management
+
+All application state is stored in memory using a thread-safe `SharedState` dataclass:
+
+- **Zero File I/O**: No reading/writing state files during operation
+- **Faster Performance**: Eliminates disk access overhead
+- **Thread-Safe**: Lock-protected shared state across 6 concurrent threads
+- **Clean Architecture**: Centralized state management in `state/shared_state.py`
+
+### Multi-Threaded Architecture
+
+SkinCloner uses 6 specialized threads for optimal performance:
+
+1. **Phase Thread**: Monitors LCU for game phase changes (lobby → champ select → in-game)
+2. **Champion Thread**: Detects champion hover/lock and fetches owned skins from LCU
+3. **OCR Thread**: High-frequency skin name detection using Tesseract OCR
+4. **WebSocket Thread**: Real-time event handling via LCU WebSocket connection
+5. **LCU Monitor Thread**: Maintains connection to League Client
+6. **Loadout Ticker Thread**: Countdown timer for injection timing
+
+All threads coordinate through the shared state system for seamless operation.
 
 ---
 
@@ -191,8 +245,8 @@ SkinCloner/
 ├── README.md                     # This documentation file
 │
 ├── injection/                    # Skin injection system
-│   ├── injector.py               # CSLOL injection logic
-│   ├── manager.py                # Injection management and coordination
+│   ├── injector.py               # CSLOL injection logic with overlay management
+│   ├── manager.py                # Injection manager with unified game monitor
 │   ├── mods_map.json             # Mod configuration mapping
 │   └── tools/                    # CSLOL modification tools
 │       ├── mod-tools.exe         # Main modification tool
@@ -233,8 +287,7 @@ SkinCloner/
 │   └── tray_manager.py           # System tray management
 │
 ├── state/                        # Shared state management
-│   ├── shared_state.py           # Thread-safe shared state
-│   └── [runtime files]           # Temporary state files
+│   └── shared_state.py           # Thread-safe in-memory shared state (no file I/O)
 │
 ├── dependencies/                 # Local dependencies
 │   └── tesserocr-*.whl          # Pre-compiled Tesseract OCR wheel
