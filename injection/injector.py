@@ -14,7 +14,14 @@ import shutil
 
 from utils.logging import get_logger
 from utils.paths import get_skins_dir, get_injection_dir
-from constants import PROCESS_TERMINATE_TIMEOUT_S, PROCESS_MONITOR_SLEEP_S, ENABLE_PRIORITY_BOOST, ENABLE_GAME_SUSPENSION
+from constants import (
+    PROCESS_TERMINATE_TIMEOUT_S, 
+    PROCESS_MONITOR_SLEEP_S, 
+    ENABLE_PRIORITY_BOOST, 
+    ENABLE_GAME_SUSPENSION,
+    GAME_RESUME_VERIFICATION_WAIT_S,
+    GAME_RESUME_MAX_ATTEMPTS
+)
 
 log = get_logger()
 
@@ -246,19 +253,8 @@ class SkinInjector:
                     'timestamp': time.time()
                 }
                 
-                # Resume game NOW - mkoverlay is done, let game load while runoverlay hooks
-                if game_process_suspended and game_process_suspended[0]:
-                    try:
-                        game_process_suspended[0].resume()
-                        log.info(f"GameMonitor: ✓ Resumed game after mkoverlay (PID={game_process_suspended[0].pid})")
-                        log.info(f"GameMonitor: Game unfrozen - will load while runoverlay hooks in")
-                        # Signal to GameMonitor that we already resumed
-                        if game_manually_resumed is not None:
-                            game_manually_resumed[0] = True
-                    except Exception as e:
-                        log.warning(f"GameMonitor: Failed to resume game: {e}")
-                        if game_manually_resumed is not None:
-                            game_manually_resumed[0] = True  # Signal even on error
+                # DON'T resume game yet - keep it frozen until runoverlay starts
+                log.info(f"GameMonitor: mkoverlay done - keeping game frozen until runoverlay starts")
                 
         except subprocess.TimeoutExpired:
             log.error("Injector: mkoverlay timeout")
@@ -266,7 +262,7 @@ class SkinInjector:
             if game_process_suspended and game_process_suspended[0]:
                 try:
                     game_process_suspended[0].resume()
-                    log.warning(f"GameMonitor: Resumed game after mkoverlay timeout")
+                    log.warning(f"GameMonitor: Resumed game after mkoverlay timeout (safety)")
                     if game_manually_resumed is not None:
                         game_manually_resumed[0] = True
                 except:
@@ -279,7 +275,7 @@ class SkinInjector:
             if game_process_suspended and game_process_suspended[0]:
                 try:
                     game_process_suspended[0].resume()
-                    log.warning(f"GameMonitor: Resumed game after mkoverlay error")
+                    log.warning(f"GameMonitor: Resumed game after mkoverlay error (safety)")
                     if game_manually_resumed is not None:
                         game_manually_resumed[0] = True
                 except:
@@ -317,6 +313,60 @@ class SkinInjector:
                     log.debug(f"Injector: Could not boost process priority: {e}")
             
             self.current_overlay_process = proc
+            
+            # Resume game NOW - runoverlay started, game can load while runoverlay hooks in
+            if game_process_suspended and game_process_suspended[0]:
+                try:
+                    import psutil
+                    game_proc = game_process_suspended[0]
+                    
+                    # Check current status before resume
+                    try:
+                        status_before = game_proc.status()
+                        log.debug(f"GameMonitor: Process status before resume: {status_before}")
+                    except:
+                        pass
+                    
+                    # Resume until process is no longer suspended
+                    # (process may be suspended multiple times if both monitors ran)
+                    for attempt in range(1, GAME_RESUME_MAX_ATTEMPTS + 1):
+                        try:
+                            game_proc.resume()
+                            time.sleep(GAME_RESUME_VERIFICATION_WAIT_S)
+                            
+                            status = game_proc.status()
+                            if status != psutil.STATUS_STOPPED:
+                                # Successfully resumed!
+                                if attempt == 1:
+                                    log.info(f"GameMonitor: ✓ Resumed game after runoverlay started (PID={game_proc.pid}, status={status})")
+                                else:
+                                    log.info(f"GameMonitor: ✓ Resumed game after {attempt} attempts (PID={game_proc.pid}, status={status})")
+                                    log.info(f"GameMonitor: (Process was suspended {attempt} times - likely double suspension)")
+                                log.info(f"GameMonitor: Game unfrozen - loading while runoverlay hooks in")
+                                break
+                            else:
+                                # Still suspended, try again
+                                if attempt < GAME_RESUME_MAX_ATTEMPTS:
+                                    log.debug(f"GameMonitor: Process still suspended after attempt {attempt}, trying again...")
+                                else:
+                                    log.error(f"GameMonitor: ✗ Failed to resume after {GAME_RESUME_MAX_ATTEMPTS} attempts - game will be frozen!")
+                                    
+                        except psutil.NoSuchProcess:
+                            log.warning("GameMonitor: Process disappeared during resume")
+                            break
+                        except Exception as e:
+                            log.warning(f"GameMonitor: Resume attempt {attempt} error: {e}")
+                            if attempt >= GAME_RESUME_MAX_ATTEMPTS:
+                                break
+                    
+                    # Signal to GameMonitor that we already resumed
+                    if game_manually_resumed is not None:
+                        game_manually_resumed[0] = True
+                        
+                except Exception as e:
+                    log.error(f"GameMonitor: Failed to resume game: {e}")
+                    if game_manually_resumed is not None:
+                        game_manually_resumed[0] = True  # Signal even on error
             
             # Monitor process with stop callback
             start_time = time.time()
@@ -413,16 +463,29 @@ class SkinInjector:
             log.error(f"Injector: Failed to create mkoverlay command: {e}")
             return -1
     
-    def inject_skin(self, skin_name: str, timeout: int = 60, stop_callback=None) -> bool:
-        """Inject a single skin"""
+    def inject_skin(self, skin_name: str, timeout: int = 60, stop_callback=None, pre_suspended_process=None) -> bool:
+        """Inject a single skin
+        
+        Args:
+            skin_name: Name of skin to inject
+            timeout: Timeout for injection process
+            stop_callback: Callback to check if injection should stop
+            pre_suspended_process: Already suspended game process (from persistent monitor)
+        """
         injection_start_time = time.time()
-        game_process_suspended = [None]  # Use list so it's mutable across threads
+        game_process_suspended = [pre_suspended_process]  # Use pre-suspended process if available
         game_monitor_active = [False]  # Use list so it's mutable across threads
         game_manually_resumed = [False]  # Flag to tell monitor we already resumed
         
+        # Check if we have a pre-suspended process from persistent monitor
+        if pre_suspended_process is not None:
+            log.info(f"GameMonitor: Using pre-suspended process (PID={pre_suspended_process.pid})")
+            log.info("GameMonitor: Game already frozen by persistent monitor - skipping GameMonitor thread")
+        
         # Start game process monitor thread IMMEDIATELY (before slow operations)
         # This ensures we catch the game process as early as possible
-        if ENABLE_GAME_SUSPENSION:
+        # Skip if we already have a pre-suspended process (to avoid double suspension)
+        if ENABLE_GAME_SUSPENSION and pre_suspended_process is None:
             import threading
             import psutil
             game_monitor_active[0] = True

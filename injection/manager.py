@@ -12,7 +12,15 @@ from typing import Optional
 
 from .injector import SkinInjector
 from utils.logging import get_logger
-from constants import INJECTION_THRESHOLD_SECONDS
+from constants import (
+    INJECTION_THRESHOLD_SECONDS, 
+    PERSISTENT_MONITOR_START_SECONDS,
+    PERSISTENT_MONITOR_CHECK_INTERVAL_S,
+    PERSISTENT_MONITOR_IDLE_INTERVAL_S,
+    PERSISTENT_MONITOR_WAIT_TIMEOUT_S,
+    PERSISTENT_MONITOR_WAIT_INTERVAL_S,
+    PERSISTENT_MONITOR_AUTO_RESUME_S
+)
 
 log = get_logger()
 
@@ -36,6 +44,12 @@ class InjectionManager:
         self._injection_in_progress = False  # Track if injection is running
         self._cleanup_in_progress = False  # Track if cleanup is running
         self._cleanup_lock = threading.Lock()  # Lock for cleanup operations
+        
+        # Persistent game monitor for early suspension
+        self._persistent_monitor_active = False
+        self._persistent_monitor_thread = None
+        self._suspended_game_process = None
+        self._game_manually_resumed = False
     
     def _ensure_initialized(self):
         """Initialize the injector lazily when first needed"""
@@ -46,6 +60,159 @@ class InjectionManager:
                     self.injector = SkinInjector(self.tools_dir, self.mods_dir, self.zips_dir, self.game_dir)
                     self._initialized = True
                     log.info("[INJECT] Injection system initialized successfully")
+    
+    def _start_persistent_game_monitor(self):
+        """Start persistent game monitor when champion is locked"""
+        # Stop any existing monitor first
+        self._stop_persistent_game_monitor()
+        
+        self._persistent_monitor_active = True
+        self._suspended_game_process = None
+        self._game_manually_resumed = False
+        
+        def persistent_monitor():
+            """Monitor for game process and suspend immediately when found"""
+            try:
+                import psutil
+                import time
+                
+                log.info("PersistentMonitor: Started - watching for game process...")
+                suspension_start_time = None
+                
+                while self._persistent_monitor_active:
+                    # If we've already suspended the game, check for safety timeout
+                    if self._suspended_game_process is not None:
+                        # Check safety timeout to auto-resume
+                        if suspension_start_time is not None:
+                            elapsed = time.time() - suspension_start_time
+                            if elapsed >= PERSISTENT_MONITOR_AUTO_RESUME_S:
+                                log.warning(f"PersistentMonitor: ⚠ AUTO-RESUME after 20s (safety timeout)")
+                                log.warning(f"PersistentMonitor: Injection took too long - releasing game to prevent freeze")
+                                try:
+                                    self._suspended_game_process.resume()
+                                    self._suspended_game_process = None
+                                    suspension_start_time = None
+                                except Exception as e:
+                                    log.error(f"PersistentMonitor: Auto-resume error: {e}")
+                                break
+                        
+                        time.sleep(PERSISTENT_MONITOR_IDLE_INTERVAL_S)
+                        continue
+                    
+                    # Look for game process
+                    for proc in psutil.process_iter(['name', 'pid']):
+                        if not self._persistent_monitor_active:
+                            break
+                            
+                        if proc.info['name'] == 'League of Legends.exe':
+                            try:
+                                game_proc = psutil.Process(proc.info['pid'])
+                                log.info(f"PersistentMonitor: ✓ Found game (PID={proc.info['pid']})")
+                                
+                                # Try to suspend immediately
+                                try:
+                                    game_proc.suspend()
+                                    self._suspended_game_process = game_proc
+                                    suspension_start_time = time.time()  # Start safety timer
+                                    log.info(f"PersistentMonitor: ✓ Suspended game (PID={proc.info['pid']})")
+                                    log.info(f"PersistentMonitor: Game frozen - will auto-resume after {PERSISTENT_MONITOR_AUTO_RESUME_S:.0f}s if injection not done")
+                                    break
+                                except psutil.AccessDenied:
+                                    log.error("PersistentMonitor: ✗ ACCESS DENIED - Cannot suspend")
+                                    log.error("PersistentMonitor: Try running SkinCloner as Administrator")
+                                    self._persistent_monitor_active = False
+                                    break
+                                except Exception as e:
+                                    log.error(f"PersistentMonitor: ✗ Failed to suspend: {e}")
+                                    break
+                                    
+                            except psutil.NoSuchProcess:
+                                continue
+                            except Exception as e:
+                                log.error(f"PersistentMonitor: Error: {e}")
+                                break
+                    
+                    time.sleep(PERSISTENT_MONITOR_CHECK_INTERVAL_S)
+                
+                log.debug("PersistentMonitor: Stopped")
+                
+            except Exception as e:
+                log.error(f"PersistentMonitor: Fatal error: {e}")
+        
+        self._persistent_monitor_thread = threading.Thread(target=persistent_monitor, daemon=True, name="PersistentGameMonitor")
+        self._persistent_monitor_thread.start()
+        log.debug("PersistentMonitor: Background thread started")
+    
+    def _stop_persistent_game_monitor(self):
+        """Stop the persistent game monitor"""
+        if self._persistent_monitor_active:
+            log.debug("PersistentMonitor: Stopping...")
+            self._persistent_monitor_active = False
+            
+            # Resume game if still suspended
+            if self._suspended_game_process is not None:
+                try:
+                    import psutil
+                    if self._suspended_game_process.status() == psutil.STATUS_STOPPED:
+                        self._suspended_game_process.resume()
+                        log.info("PersistentMonitor: Resumed suspended game on cleanup")
+                except:
+                    pass
+                
+            self._suspended_game_process = None
+    
+    def _get_suspended_game_process(self):
+        """Get the currently suspended game process (if any)"""
+        return self._suspended_game_process
+    
+    def _mark_game_resumed(self):
+        """Mark that the game has been resumed by injection"""
+        self._game_manually_resumed = True
+    
+    def resume_if_suspended(self):
+        """Resume game if persistent monitor suspended it (for when injection is skipped)"""
+        if self._suspended_game_process is not None:
+            try:
+                import psutil
+                game_proc = self._suspended_game_process
+                
+                # Check if still suspended
+                try:
+                    status = game_proc.status()
+                    if status == psutil.STATUS_STOPPED:
+                        log.info(f"[INJECT] Resuming suspended game (injection skipped) - PID={game_proc.pid}")
+                        
+                        # Resume until no longer suspended
+                        from constants import GAME_RESUME_MAX_ATTEMPTS, GAME_RESUME_VERIFICATION_WAIT_S
+                        import time
+                        
+                        for attempt in range(1, GAME_RESUME_MAX_ATTEMPTS + 1):
+                            game_proc.resume()
+                            time.sleep(GAME_RESUME_VERIFICATION_WAIT_S)
+                            
+                            new_status = game_proc.status()
+                            if new_status != psutil.STATUS_STOPPED:
+                                log.info(f"[INJECT] ✓ Game resumed successfully after {attempt} attempt(s)")
+                                break
+                            elif attempt >= GAME_RESUME_MAX_ATTEMPTS:
+                                log.error(f"[INJECT] ✗ Failed to resume game after {GAME_RESUME_MAX_ATTEMPTS} attempts")
+                        
+                        # Clear the suspended process reference
+                        self._suspended_game_process = None
+                        
+                        # Stop persistent monitor
+                        self._stop_persistent_game_monitor()
+                    else:
+                        log.debug(f"[INJECT] Game not suspended (status={status}) - no resume needed")
+                except psutil.NoSuchProcess:
+                    log.debug("[INJECT] Game process no longer exists - clearing reference")
+                    self._suspended_game_process = None
+                    self._stop_persistent_game_monitor()
+                    
+            except Exception as e:
+                log.error(f"[INJECT] Error resuming suspended game: {e}")
+        else:
+            log.debug("[INJECT] No suspended game process to resume")
     
     def on_champion_locked(self, champion_name: str, champion_id: int = None, owned_skin_ids: set = None):
         """Called when a champion is locked"""
@@ -82,6 +249,12 @@ class InjectionManager:
                     self.last_skin_name = skin_name
                     self.last_injection_time = current_time
     
+    def on_loadout_countdown(self, seconds_remaining: int):
+        """Called during loadout countdown - no longer used (monitor starts with injection)"""
+        # Monitor now starts when injection actually begins, not at T-1
+        # This prevents unnecessary suspension for base skins and owned skins
+        pass
+    
     def inject_skin_immediately(self, skin_name: str, stop_callback=None) -> bool:
         """Immediately inject a specific skin"""
         self._ensure_initialized()
@@ -101,7 +274,33 @@ class InjectionManager:
             self._injection_in_progress = True
             log.debug(f"[INJECT] Injection started - lock acquired for: {skin_name}")
             
-            success = self.injector.inject_skin(skin_name, stop_callback=stop_callback)
+            # Start persistent monitor now (only when injection actually happens)
+            if not self._persistent_monitor_active:
+                log.info("[INJECT] Starting persistent game monitor for injection")
+                self._start_persistent_game_monitor()
+            
+            # Wait briefly for persistent monitor to find and suspend game
+            # This avoids race condition where GameMonitor also tries to suspend
+            if self._persistent_monitor_active and self._suspended_game_process is None:
+                import time
+                log.debug("[INJECT] Waiting for persistent monitor to suspend game...")
+                wait_start = time.time()
+                while time.time() - wait_start < PERSISTENT_MONITOR_WAIT_TIMEOUT_S and self._suspended_game_process is None:
+                    time.sleep(PERSISTENT_MONITOR_WAIT_INTERVAL_S)
+                
+                if self._suspended_game_process is not None:
+                    log.debug(f"[INJECT] Game suspended by persistent monitor after {time.time() - wait_start:.2f}s")
+                else:
+                    log.debug(f"[INJECT] Persistent monitor didn't suspend game in {PERSISTENT_MONITOR_WAIT_TIMEOUT_S}s - will use GameMonitor fallback")
+            
+            # Use the persistent monitor's suspended process
+            suspended_process = self._get_suspended_game_process()
+            
+            success = self.injector.inject_skin(
+                skin_name, 
+                stop_callback=stop_callback,
+                pre_suspended_process=suspended_process
+            )
             
             if success:
                 self.last_skin_name = skin_name
@@ -112,6 +311,9 @@ class InjectionManager:
             self._injection_in_progress = False
             self.injection_lock.release()
             log.debug(f"[INJECT] Injection completed - lock released")
+            
+            # Stop persistent monitor after injection completes
+            self._stop_persistent_game_monitor()
     
     def inject_skin_for_testing(self, skin_name: str) -> bool:
         """Inject a skin for testing purposes - stops overlay immediately after mkoverlay"""
@@ -169,6 +371,9 @@ class InjectionManager:
         """Kill all runoverlay processes (for ChampSelect cleanup)"""
         if not self._initialized:
             return  # Nothing to kill if not initialized
+        
+        # Stop persistent game monitor when exiting champ select
+        self._stop_persistent_game_monitor()
         
         # Prevent duplicate cleanup calls from running simultaneously
         if self._cleanup_in_progress:

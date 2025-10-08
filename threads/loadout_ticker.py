@@ -85,7 +85,15 @@ class LoadoutTicker(threading.Thread):
             bucket = remain_ms // 1000
             if bucket != last_bucket:
                 last_bucket = bucket
-                log.info(f"[loadout #{self.ticker_id}] T-{int(remain_ms // 1000)}s")
+                seconds_remaining = int(remain_ms // 1000)
+                log.info(f"[loadout #{self.ticker_id}] T-{seconds_remaining}s")
+                
+                # Notify injection manager of countdown (for starting persistent game monitor at T-1)
+                if self.injection_manager:
+                    try:
+                        self.injection_manager.on_loadout_countdown(seconds_remaining)
+                    except Exception as e:
+                        log.debug(f"[loadout] countdown notification failed: {e}")
             
             # Write last hovered skin at T<=threshold (configurable)
             thresh = int(getattr(self.state, 'skin_write_ms', SKIN_THRESHOLD_MS_DEFAULT) or SKIN_THRESHOLD_MS_DEFAULT)
@@ -181,9 +189,21 @@ class LoadoutTicker(threading.Thread):
                         # Skip injection for base skins
                         if ocr_skin_id == 0:
                             log.info(f"[inject] skipping base skin injection (skinId=0)")
+                            # Resume game if persistent monitor suspended it
+                            if self.injection_manager:
+                                try:
+                                    self.injection_manager.resume_if_suspended()
+                                except Exception as e:
+                                    log.warning(f"[inject] Failed to resume game after skipping base skin: {e}")
                         # Skip injection if user owns the OCR-detected skin (using LCU inventory)
                         elif ocr_skin_id in owned_skin_ids:
                             log.info(f"[inject] skipping injection - user owns this skin (skinId={ocr_skin_id}, verified via LCU inventory)")
+                            # Resume game if persistent monitor suspended it
+                            if self.injection_manager:
+                                try:
+                                    self.injection_manager.resume_if_suspended()
+                                except Exception as e:
+                                    log.warning(f"[inject] Failed to resume game after skipping owned skin: {e}")
                         # Inject if user doesn't own the hovered skin
                         elif self.injection_manager:
                             try:
