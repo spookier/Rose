@@ -353,7 +353,7 @@ class OCRSkinThread(threading.Thread):
         
         champ_id = self.state.hovered_champ_id or self.state.locked_champ_id
         
-        # OPTIMIZED PIPELINE: Direct matching for English-only, LCU pipeline for mixed languages
+        # SECURE PIPELINE: Always match against English database for validation
         # Check if OCR is configured for English only (not mixed with other languages)
         is_english_only = (
             self.ocr.lang == "eng" or 
@@ -361,23 +361,29 @@ class OCRSkinThread(threading.Thread):
         )
         
         if is_english_only and champ_id:
-            # ENGLISH OPTIMIZATION: Direct OCR → ZIP matching (bypass LCU)
+            # ENGLISH OPTIMIZATION: OCR → English DB → ZIP (secure matching)
             champ_slug = self.db.slug_by_id.get(champ_id)
+            log.debug(f"[DEBUG] English pipeline: champ_id={champ_id}, champ_slug={champ_slug}, txt='{txt}'")
             if champ_slug:
                 # Load champion skins if not already loaded
                 if champ_slug not in self.db.champion_skins:
                     self.db.load_champion_skins_by_id(champ_id)
                 
-                # Direct matching against English skin names
+                # Match against English skin names for validation
                 best_match = None
                 best_similarity = 0.0
                 
-                for skin_id, skin_name in self.db.champion_skins.get(champ_slug, {}).items():
+                available_skins = self.db.champion_skins.get(champ_slug, {})
+                log.debug(f"[DEBUG] Available skins for {champ_slug}: {list(available_skins.values())}")
+                
+                for skin_id, skin_name in available_skins.items():
                     similarity = levenshtein_score(txt, skin_name)
+                    log.debug(f"[DEBUG] Comparing '{txt}' vs '{skin_name}' = {similarity:.3f}")
                     if similarity > best_similarity and similarity >= OCR_FUZZY_MATCH_THRESHOLD:
                         best_match = (skin_id, skin_name, similarity)
                         best_similarity = similarity
                 
+                log.debug(f"[DEBUG] Best match: {best_match}, threshold: {OCR_FUZZY_MATCH_THRESHOLD}")
                 if best_match:
                     skin_id, skin_name, similarity = best_match
                     skin_key = f"{champ_slug}_{skin_id}"
@@ -386,10 +392,10 @@ class OCRSkinThread(threading.Thread):
                         is_base = (skin_id % 1000 == 0)
                         
                         if is_base:
-                            log.info(f"[hover:skin] {skin_name} (skinId=0, champ={champ_slug}, similarity={similarity:.1%}, direct_match)")
+                            log.info(f"[hover:skin] {skin_name} (skinId=0, champ={champ_slug}, similarity={similarity:.1%}, english_db_match)")
                             self.state.last_hovered_skin_id = 0
                         else:
-                            log.info(f"[hover:skin] {skin_name} (skinId={skin_id}, champ={champ_slug}, similarity={similarity:.1%}, direct_match)")
+                            log.info(f"[hover:skin] {skin_name} (skinId={skin_id}, champ={champ_slug}, similarity={similarity:.1%}, english_db_match)")
                             self.state.last_hovered_skin_id = skin_id
                         
                         self.last_key = skin_key

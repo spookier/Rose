@@ -260,7 +260,6 @@ SkinCloner/
 │
 ├── database/                     # Champion and skin databases
 │   ├── name_db.py                # Champion and skin name database
-│   └── multilang_db.py           # Multi-language database with auto-detection
 │
 ├── lcu/                          # League Client API integration
 │   ├── client.py                 # LCU API client implementation

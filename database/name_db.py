@@ -43,6 +43,7 @@ class NameDB:
         self.champ_name_by_id: Dict[int, str] = {}
         self.entries_by_champ: Dict[str, List[Entry]] = {}
         self.skin_name_by_id: Dict[int, str] = {}
+        self.champion_skins: Dict[str, Dict[int, str]] = {}  # champ_slug -> {skin_id: skin_name}
         self._skins_loaded: set = set()
         self._norm_cache: Dict[str, str] = {}
         self._load_versions()
@@ -145,6 +146,7 @@ class NameDB:
             champ_name = champ_data.get("name", slug)
             
             # Load all skins for this champion
+            champion_skins = {}  # Local dict for this champion
             for s in skins:
                 try:
                     sid = int(s.get("id", 0))
@@ -158,9 +160,13 @@ class NameDB:
                     # Store skin name by ID (English only)
                     if sid > 0:
                         self.skin_name_by_id[sid] = sname
+                        champion_skins[sid] = sname  # Also store in champion-specific dict
                         loaded_count += 1
                 except Exception:
                     pass
+            
+            # Store champion skins for direct matching
+            self.champion_skins[slug] = champion_skins
             
             self._skins_loaded.add(slug)
             log.debug(f"[NameDB] Loaded {loaded_count} skins for {slug}")
