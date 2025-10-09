@@ -119,9 +119,45 @@ SkinCloner is a fully automated system that detects skin selections in League of
 **SkinCloner is designed to be completely transparent - just launch it and forget about it!**
 
 1. **Launch SkinCloner** (from desktop shortcut or start menu)
-2. **Let it run in the background** - you don't need to interact with it
-3. **Play League of Legends normally** - the app works silently in the background
-4. **That's it!** SkinCloner handles everything automatically
+2. **Accept the UAC prompt** (Administrator privileges required for injection)
+3. **Let it run in the background** - you don't need to interact with it
+4. **Play League of Legends normally** - the app works silently in the background
+5. **That's it!** SkinCloner handles everything automatically
+
+### 🔐 Administrator Rights & Auto-Start
+
+**SkinCloner requires Administrator privileges** to inject skins into League of Legends.
+
+#### First Launch
+
+- **UAC Prompt**: On first launch, Windows will ask for administrator permission
+- **One-Time**: Click "Yes" to allow the app to run with admin rights
+- **Automatic**: The app will then restart with proper privileges
+
+#### Auto-Start (Recommended)
+
+**Enable seamless auto-start to avoid UAC prompts on every launch:**
+
+1. Launch SkinCloner (accept the initial UAC prompt)
+2. Right-click the SkinCloner icon in the system tray
+3. Click **"Enable Auto-Start"**
+4. Done! The app will now:
+   - Start automatically when you log into Windows
+   - Run with administrator privileges
+   - **No UAC prompts** on startup
+
+**Benefits:**
+
+- ✅ No more UAC prompts on every launch
+- ✅ Starts automatically with Windows
+- ✅ Runs silently in the background
+- ✅ Works across computer restarts
+
+**To disable auto-start:**
+
+- Right-click the tray icon → "Remove Auto-Start"
+
+For detailed information, see **[ADMIN_RIGHTS.md](ADMIN_RIGHTS.md)**
 
 The application runs in the system tray and requires no user interaction. Simply play League of Legends as usual, and when you hover over skins in champion select, the app will automatically detect and inject them.
 
@@ -179,6 +215,7 @@ While you play, SkinCloner operates through a sophisticated multi-threaded syste
 - **📊 Real-time Monitoring**: WebSocket-based event handling for optimal performance
 - **🔧 Diagnostic Tools**: Built-in EasyOCR validation with automatic GPU detection
 - **📱 System Tray Integration**: Clean background operation with system tray management
+- **🔐 Auto-Start with Admin Rights**: Task Scheduler integration for seamless auto-start (no UAC prompts)
 - **📝 Comprehensive Logging**: Detailed logging system with configurable retention
 
 ### Performance Optimizations
@@ -286,6 +323,7 @@ SkinCloner/
 │   ├── smart_skin_downloader.py  # Smart downloader with rate limiting
 │   ├── repo_downloader.py        # Repository ZIP downloader
 │   ├── window_utils.py           # Windows window capture utilities
+│   ├── admin_utils.py            # Admin rights and auto-start management
 │   └── tray_manager.py           # System tray management
 │
 ├── state/                        # Shared state management

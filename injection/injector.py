@@ -227,7 +227,9 @@ class SkinInjector:
                 import subprocess
                 creationflags = subprocess.CREATE_NO_WINDOW
             
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, creationflags=creationflags)
+            # Don't capture stdout to avoid pipe buffer deadlock - send to devnull instead
+            import os
+            proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=creationflags)
             
             # Boost process priority to maximize CPU contention if enabled
             if ENABLE_PRIORITY_BOOST:
@@ -239,11 +241,12 @@ class SkinInjector:
                 except Exception as e:
                     log.debug(f"Injector: Could not boost process priority: {e}")
             
-            stdout, _ = proc.communicate(timeout=timeout)
+            # Wait for process to complete (no stdout to read, so no deadlock)
+            proc.wait(timeout=timeout)
             mkoverlay_duration = time.time() - mkoverlay_start
             
             if proc.returncode != 0:
-                log.error(f"Injector: mkoverlay failed: {stdout}")
+                log.error(f"Injector: mkoverlay failed with return code: {proc.returncode}")
                 return proc.returncode
             else:
                 log.info(f"Injector: mkoverlay completed in {mkoverlay_duration:.2f}s")
@@ -275,12 +278,14 @@ class SkinInjector:
         try:
             # Hide console window on Windows
             import sys
+            import os
             creationflags = 0
             if sys.platform == "win32":
                 import subprocess
                 creationflags = subprocess.CREATE_NO_WINDOW
             
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, creationflags=creationflags)
+            # Don't capture stdout to avoid pipe buffer deadlock - send to devnull instead
+            proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=creationflags)
             
             # Boost process priority to maximize CPU contention if enabled
             if ENABLE_PRIORITY_BOOST:
@@ -330,11 +335,10 @@ class SkinInjector:
                 
                 time.sleep(PROCESS_MONITOR_SLEEP_S)
             
-            # Process completed normally
-            stdout, _ = proc.communicate()
+            # Process completed normally (no stdout captured)
             self.current_overlay_process = None
             if proc.returncode != 0:
-                log.error(f"Injector: runoverlay failed: {stdout}")
+                log.error(f"Injector: runoverlay failed with return code: {proc.returncode}")
                 return proc.returncode
             else:
                 log.debug(f"Injector: runoverlay completed successfully")
@@ -362,17 +366,19 @@ class SkinInjector:
             
             # Set creation flags for Windows
             import sys
+            import os
             creationflags = 0
             if sys.platform == "win32":
                 creationflags = subprocess.CREATE_NO_WINDOW
             
             try:
-                proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, creationflags=creationflags)
-                stdout, _ = proc.communicate(timeout=timeout)
+                # Don't capture stdout to avoid pipe buffer deadlock - send to devnull instead
+                proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=creationflags)
+                proc.wait(timeout=timeout)
                 mkoverlay_duration = time.time() - mkoverlay_start
                 
                 if proc.returncode != 0:
-                    log.error(f"Injector: mkoverlay failed: {stdout}")
+                    log.error(f"Injector: mkoverlay failed with return code: {proc.returncode}")
                     return proc.returncode
                 else:
                     log.debug(f"Injector: mkoverlay completed in {mkoverlay_duration:.2f}s")
@@ -550,12 +556,14 @@ class SkinInjector:
             try:
                 # Hide console window on Windows
                 import sys
+                import os
                 creationflags = 0
                 if sys.platform == "win32":
                     import subprocess
                     creationflags = subprocess.CREATE_NO_WINDOW
                 
-                proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, creationflags=creationflags)
+                # Don't capture stdout to avoid pipe buffer issues - send to devnull instead
+                proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=creationflags)
                 self.current_overlay_process = proc
                 
                 # For pre-built overlays, we don't need to monitor the process long-term

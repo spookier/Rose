@@ -151,11 +151,13 @@ def check_single_instance():
         # Show error message using Windows MessageBox since console might not be visible
         if sys.platform == "win32":
             try:
+                # MB_OK (0x0) + MB_ICONERROR (0x10) + MB_SETFOREGROUND (0x10000) + MB_TOPMOST (0x40000)
+                # = 0x50010 - Ensures dialog appears on top and gets focus
                 ctypes.windll.user32.MessageBoxW(
                     0, 
                     "Another instance of SkinCloner is already running!\n\nPlease close the existing instance before starting a new one.",
                     "SkinCloner - Instance Already Running",
-                    0x10  # MB_ICONERROR
+                    0x50010  # MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST
                 )
             except Exception:
                 # Fallback to console output if MessageBox fails
@@ -202,6 +204,10 @@ def validate_ocr_language(lang: str) -> bool:
 
 def main():
     """Main entry point"""
+    
+    # Check for admin rights FIRST (required for injection to work)
+    from utils.admin_utils import ensure_admin_rights
+    ensure_admin_rights()
     
     # Check for single instance before doing anything else
     check_single_instance()
@@ -351,14 +357,14 @@ def main():
     
     try:
         ocr = OCR(lang=ocr_lang, psm=args.psm, tesseract_exe=args.tesseract_exe, use_gpu=use_gpu)
-        log.info(f"OCR: {ocr.backend} (lang: {ocr_lang}, GPU: {use_gpu})")
+        log.info(f"OCR: {ocr.backend} (lang: {ocr_lang}, GPU: {ocr.use_gpu})")
     except Exception as e:
         log.warning(f"Failed to initialize OCR with language '{ocr_lang}': {e}")
         log.info("Attempting fallback to English OCR...")
         
         try:
             ocr = OCR(lang="eng", psm=args.psm, tesseract_exe=args.tesseract_exe, use_gpu=use_gpu)
-            log.info(f"OCR: {ocr.backend} (lang: eng, GPU: {use_gpu})")
+            log.info(f"OCR: {ocr.backend} (lang: eng, GPU: {ocr.use_gpu})")
         except Exception as fallback_e:
             log.error(f"OCR initialization failed: {fallback_e}")
             log.error("EasyOCR is not properly installed or configured.")

@@ -77,6 +77,13 @@ class OCR:
             elif use_gpu and not gpu_available:
                 print(f"🚀 Initializing EasyOCR: {langs_str} (tesseract lang: {lang})")
                 print(f"   ⚠️ GPU requested but not available, falling back to CPU")
+                print(f"   💡 PyTorch CUDA available: {gpu_available}")
+                print(f"   💡 PyTorch version: {torch.__version__}")
+                if hasattr(torch.version, 'cuda'):
+                    print(f"   💡 PyTorch built with CUDA: {torch.version.cuda if torch.version.cuda else 'No'}")
+                else:
+                    print(f"   💡 PyTorch built with CUDA: No")
+                print(f"   💡 To enable GPU: Install CUDA-enabled PyTorch from https://pytorch.org")
                 self.use_gpu = False
             else:
                 print(f"🚀 Initializing EasyOCR: {langs_str} (tesseract lang: {lang})")

@@ -97,6 +97,7 @@ def build_with_nuitka():
         "--nofollow-import-to=IPython",  # Don't include IPython (optional)
         "--nofollow-import-to=pytest",  # Don't include pytest
         "--nofollow-import-to=scipy.io",  # Don't include scipy.io (optional, but keep ndimage for EasyOCR)
+        "--nofollow-import-to=skimage",  # Don't include scikit-image (using cv2 instead)
         "--nofollow-import-to=pandas",  # Don't include pandas (optional)
         "--nofollow-import-to=dask",  # Don't include dask (heavy data processing library)
         "--nofollow-import-to=numba",  # Don't include numba (JIT compiler, optional)
