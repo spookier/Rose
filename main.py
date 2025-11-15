@@ -989,7 +989,7 @@ def run_league_unlock(injection_threshold: Optional[float] = None):
     # Start all threads
     thread_manager.start_all()
 
-    log.info("System ready - UIA Detection active only in Champion Select")
+    log.info("System ready")
 
     last_phase = None
     last_loop_time = time.time()
@@ -1119,7 +1119,6 @@ def run_league_unlock(injection_threshold: Optional[float] = None):
                                 # Hide UnownedFrame by setting opacity to 0
                                 if user_interface.unowned_frame and hasattr(user_interface.unowned_frame, 'opacity_effect'):
                                     user_interface.unowned_frame.opacity_effect.setOpacity(0.0)
-                                    log.debug("[exchange] UnownedFrame hidden")
                                 
                                 # Chroma button is handled by JavaScript plugin - no need to hide Python button
                                 

@@ -377,11 +377,10 @@ class ChromaSelector:
                         owned_count += 1
             
             # Show button regardless of whether chromas exist
-            # The UnownedFrame (golden border + lock) will be shown for unowned skins
             if chromas:
                 log.debug(f"[CHROMA] Updating button for {skin_name} ({len(chromas)} total chromas, {owned_count} owned, {len(chromas) - owned_count} unowned)")
             else:
-                log.debug(f"[CHROMA] Showing button for {skin_name} (no chromas - UnownedFrame only)")
+                log.debug(f"[CHROMA] Showing button for {skin_name} (no chromas)")
             
             # Check if this is a chroma selection for the same base skin
             is_chroma_selection = False

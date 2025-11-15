@@ -122,8 +122,8 @@ class UserInterface:
             if self.unowned_frame:
                 try:
                     self.unowned_frame.cleanup()
-                except Exception as e:
-                    log.debug(f"[UI] Error cleaning up UnownedFrame: {e}")
+                except Exception:
+                    pass
                 self.unowned_frame = None
             raise
     
@@ -220,7 +220,7 @@ class UserInterface:
             should_show_unowned_frame = is_elementalist_form or (not base_skin_owned)
             
             log.debug(f"[UI] Skin analysis: has_chromas={has_chromas}, is_owned={is_owned_var}, is_base_skin={is_base_skin_var}, base_skin_owned={base_skin_owned}, is_elementalist_form={is_elementalist_form}, is_chroma_selection={is_chroma_selection}")
-            log.debug(f"[UI] Will show: chroma_ui={should_show_chroma_ui}, unowned_frame={should_show_unowned_frame}")
+            log.debug(f"[UI] Will show: chroma_ui={should_show_chroma_ui}")
             
             # Show/hide ChromaUI based on chromas
             if should_show_chroma_ui:
@@ -393,13 +393,11 @@ class UserInterface:
         """Legacy UnownedFrame removed (no-op)."""
         self._last_unowned_skin_id = None
         self._last_unowned_base_skin_id = None
-        log.debug("[UI] UnownedFrame removed; skipping show request")
     
     def _hide_unowned_frame(self):
         """Hide UnownedFrame"""
         self._last_unowned_skin_id = None
         self._last_unowned_base_skin_id = None
-        log.debug("[UI] UnownedFrame removed; skipping hide request")
     
     def check_resolution_and_update(self):
         """Check for resolution changes and update UI components accordingly"""
@@ -797,14 +795,10 @@ class UserInterface:
                     log.error(f"[UI] ChromaUI cleanup traceback: {traceback.format_exc()}")
             
             if unowned_frame_to_cleanup:
-                log.debug("[UI] Cleaning up UnownedFrame...")
                 try:
                     unowned_frame_to_cleanup.cleanup()
-                    log.debug("[UI] UnownedFrame cleaned up successfully")
-                except Exception as e:
-                    log.error(f"[UI] Error cleaning up UnownedFrame: {e}")
-                    import traceback
-                    log.error(f"[UI] UnownedFrame cleanup traceback: {traceback.format_exc()}")
+                except Exception:
+                    pass
             
             if dice_button_to_cleanup:
                 log.debug("[UI] Cleaning up DiceButton...")
@@ -1115,9 +1109,8 @@ class UserInterface:
                     if hasattr(self.unowned_frame, 'opacity_effect') and self.unowned_frame.opacity_effect:
                         self.unowned_frame.opacity_effect.setOpacity(0.0)
                     self.unowned_frame.hide()
-                    log.debug("[UI] UnownedFrame hidden instantly")
-                except Exception as e:
-                    log.error(f"[UI] Error hiding UnownedFrame: {e}")
+                except Exception:
+                    pass
             
             # Hide DiceButton instantly
             if self.dice_button:
@@ -1187,11 +1180,8 @@ class UserInterface:
                     self.unowned_frame.show()
                     if hasattr(self.unowned_frame, 'unowned_frame_image') and self.unowned_frame.unowned_frame_image:
                         self.unowned_frame.unowned_frame_image.show()
-                    log.debug("[UI] UnownedFrame shown without fade (ClickCatcherShow trigger)")
-                except Exception as e:
-                    log.error(f"[UI] Error showing UnownedFrame: {e}")
-            else:
-                log.debug("[UI] UnownedFrame not shown (was not previously visible)")
+                except Exception:
+                    pass
             
             # Show DiceButton only if it was previously visible
             if self._ui_visibility_state['dice_button_visible'] and self.dice_button:

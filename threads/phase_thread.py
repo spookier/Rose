@@ -368,7 +368,6 @@ class PhaseThread(threading.Thread):
                         ui_thread.stop_event.clear()
                     except Exception:
                         pass
-                log.debug("[phase] Reset UIA injection disconnect flag for Swiftplay lobby")
             
             log.info(f"[phase] Swiftplay lobby - Game mode: {game_mode}, Map ID: {map_id}")
             
@@ -603,30 +602,29 @@ class PhaseThread(threading.Thread):
             self.state.locked_champ_id = None
             self.state.locked_champ_timestamp = 0.0
 
-            # Stop UIA detection and clear its caches
+            # Stop detection and clear its caches
             ui_thread = getattr(self.state, "ui_skin_thread", None)
             if ui_thread is not None:
                 try:
                     ui_thread.clear_cache()
                 except Exception as e:
-                    log.debug(f"[phase] Failed to clear UIA cache after Swiftplay exit: {e}")
+                    log.debug(f"[phase] Failed to clear cache after Swiftplay exit: {e}")
 
                 try:
                     connection = getattr(ui_thread, "connection", None)
                     if connection and hasattr(connection, "is_connected") and connection.is_connected():
                         connection.disconnect()
                 except Exception as e:
-                    log.debug(f"[phase] Failed to disconnect UIA after Swiftplay exit: {e}")
+                    log.debug(f"[phase] Failed to disconnect after Swiftplay exit: {e}")
 
                 ui_thread.detection_available = False
                 ui_thread.detection_attempts = 0
-                # Ensure the UIA thread isn't left in a stopped state
+                # Ensure the thread isn't left in a stopped state
                 if hasattr(ui_thread, "stop_event"):
                     try:
                         ui_thread.stop_event.clear()
                     except Exception:
                         pass
-                # Ensure UIA can reconnect the next time Swiftplay lobby is entered
                 if hasattr(ui_thread, "_injection_disconnect_active"):
                     ui_thread._injection_disconnect_active = False
                 if hasattr(ui_thread, "_last_phase"):

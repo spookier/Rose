@@ -67,13 +67,12 @@ class ChampThread(threading.Thread):
         except Exception:
             pass
 
-        # Clear UIA cache to detect new champion's skin
+        # Clear cache to detect new champion's skin
         if self.state.ui_skin_thread:
             try:
                 self.state.ui_skin_thread.clear_cache()
-                log.debug("[exchange] UIA cache cleared")
             except Exception as e:
-                log.error(f"[exchange] Failed to clear UIA cache: {e}")
+                log.error(f"[exchange] Failed to clear cache: {e}")
         
         # Trigger UI hiding in main thread by setting flag
         self.state.champion_exchange_triggered = True

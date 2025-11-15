@@ -39,7 +39,6 @@ class ChromaPanelManager:
         self.current_chroma_colors = None  # Track both chroma colors for split-circle design (for JavaScript plugin)
         self.lock = threading.RLock()  # Use RLock for reentrant locking (prevents deadlock)
         self._rebuilding = False  # Flag to prevent infinite rebuild loops
-        self.pending_initial_unowned_fade = False  # Flag to trigger initial UnownedFrame fade after creation
     
     def request_create(self):
         """Request to create the panel (thread-safe, will be created in main thread)"""
@@ -47,12 +46,6 @@ class ChromaPanelManager:
             if not self.is_initialized:
                 self.pending_create = True
                 log.debug("[CHROMA] Create panel requested")
-    
-    def request_initial_unowned_fade(self):
-        """Request initial UnownedFrame fade-in for first unowned skin (thread-safe)"""
-        with self.lock:
-            self.pending_initial_unowned_fade = True
-            log.debug("[CHROMA] Initial UnownedFrame fade requested")
     
     def request_destroy(self):
         """Request to destroy the panel (thread-safe, will be destroyed in main thread)"""
@@ -300,35 +293,6 @@ class ChromaPanelManager:
             except Exception as e:
                 log.debug(f"[CHROMA] Failed to broadcast chroma state on show: {e}")
             
-            # Check ownership and trigger UnownedFrame fade if needed
-            if self.state:
-                is_owned_var = is_owned(skin_id, self.state.owned_skin_ids)
-                is_base_skin = is_default_skin(skin_id)
-                
-                # Check if base skin is owned
-                chroma_id_map = {}  # Empty map since we're using special case logic in utility function
-                base_skin_owned = is_base_skin_owned(skin_id, self.state.owned_skin_ids, chroma_id_map)
-                
-                # Special case: Elementalist Lux forms (fake IDs 99991-99999) should always show UnownedFrame
-                is_elementalist_form = 99991 <= skin_id <= 99999
-                
-                # UnownedFrame should show for:
-                # 1. Elementalist Lux forms (fake IDs 99991-99999) - always show
-                # 2. When the base skin is not owned
-                should_show_unowned_frame = is_elementalist_form or (not base_skin_owned)
-                
-                if should_show_unowned_frame:
-                    if is_elementalist_form:
-                        log.debug(f"[CHROMA] Skin {skin_id} is Elementalist Lux form - will trigger UnownedFrame fade")
-                    else:
-                        log.debug(f"[CHROMA] Skin {skin_id} is unowned (not base) - will trigger UnownedFrame fade")
-                    self.pending_initial_unowned_fade = True
-                elif is_base_skin:
-                    log.debug(f"[CHROMA] Skin {skin_id} is base skin - UnownedFrame hidden")
-                elif is_owned:
-                    log.debug(f"[CHROMA] Skin {skin_id} is owned - UnownedFrame hidden")
-                elif base_skin_owned:
-                    log.debug(f"[CHROMA] Skin {skin_id} chroma - base skin owned, UnownedFrame hidden")
     
     def show_wheel_directly(self):
         """Request to show the chroma panel for current skin (called by JavaScript plugin)"""
@@ -350,10 +314,6 @@ class ChromaPanelManager:
                 try:
                     self._create_widgets()
                     
-                    # Process initial UnownedFrame fade if requested (for first unowned skin)
-                    if self.pending_initial_unowned_fade:
-                        log.info("[CHROMA] Initial UnownedFrame fade will be handled by UserInterface")
-                        self.pending_initial_unowned_fade = False
                 except Exception as e:
                     log.error(f"[CHROMA] Error creating widgets: {e}")
             
