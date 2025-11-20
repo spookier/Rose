@@ -376,6 +376,7 @@ class PenguSkinMonitorThread(threading.Thread):
                 
                 # Load current settings
                 threshold = get_config_float("General", "injection_threshold", 0.5)
+                monitor_auto_resume_timeout = get_config_float("General", "monitor_auto_resume_timeout", 20.0)
                 autostart = is_registered_for_autostart()
                 game_path = get_config_option("General", "leaguePath") or ""
                 
@@ -395,6 +396,7 @@ class PenguSkinMonitorThread(threading.Thread):
                 payload = {
                     "type": "settings-data",
                     "threshold": threshold,
+                    "monitorAutoResumeTimeout": int(monitor_auto_resume_timeout),
                     "autostart": autostart,
                     "gamePath": game_path,
                     "gamePathValid": path_valid
@@ -410,7 +412,7 @@ class PenguSkinMonitorThread(threading.Thread):
                 else:
                     asyncio.run_coroutine_threadsafe(self._broadcast(message), self._loop)
                 
-                log.info(f"[SkinMonitor] Settings data sent: threshold={threshold}, autostart={autostart}, gamePath={game_path}, valid={path_valid}")
+                log.info(f"[SkinMonitor] Settings data sent: threshold={threshold}, monitor_auto_resume_timeout={monitor_auto_resume_timeout}, autostart={autostart}, gamePath={game_path}, valid={path_valid}")
             except Exception as e:
                 log.error(f"[SkinMonitor] Failed to handle settings request: {e}")
             return
@@ -549,15 +551,22 @@ class PenguSkinMonitorThread(threading.Thread):
                 )
                 
                 threshold = payload.get("threshold", 0.5)
+                monitor_auto_resume_timeout = payload.get("monitorAutoResumeTimeout", 20)
                 autostart = payload.get("autostart", False)
                 game_path = payload.get("gamePath", "")
                 
                 # Clamp threshold between 0.3 and 2.0
                 threshold = max(0.3, min(2.0, float(threshold)))
+                # Clamp timeout between 20 and 90
+                monitor_auto_resume_timeout = max(20, min(90, int(monitor_auto_resume_timeout)))
                 
                 # Save threshold
                 set_config_option("General", "injection_threshold", f"{threshold:.2f}")
                 log.info(f"[SkinMonitor] Injection threshold updated to {threshold:.2f}s")
+                
+                # Save monitor auto-resume timeout
+                set_config_option("General", "monitor_auto_resume_timeout", str(monitor_auto_resume_timeout))
+                log.info(f"[SkinMonitor] Monitor auto-resume timeout updated to {monitor_auto_resume_timeout}s")
                 
                 # Save game path
                 if game_path and game_path.strip():

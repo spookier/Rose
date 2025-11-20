@@ -18,7 +18,6 @@ from config import (
     PERSISTENT_MONITOR_IDLE_INTERVAL_S,
     PERSISTENT_MONITOR_WAIT_TIMEOUT_S,
     PERSISTENT_MONITOR_WAIT_INTERVAL_S,
-    PERSISTENT_MONITOR_AUTO_RESUME_S,
     INJECTION_LOCK_TIMEOUT_S,
     get_config_float,
     get_config_file_path
@@ -87,6 +86,15 @@ class InjectionManager:
         self._refresh_injection_threshold()
         return self.injection_threshold
     
+    def _get_monitor_auto_resume_timeout(self) -> float:
+        """Get monitor auto-resume timeout from config."""
+        try:
+            timeout = get_config_float("General", "monitor_auto_resume_timeout", 20.0)
+            return max(20.0, min(90.0, float(timeout)))  # Clamp between 20 and 90
+        except Exception as exc:  # noqa: BLE001
+            log.debug(f"[INJECT] Failed to get monitor auto-resume timeout: {exc}")
+            return 20.0  # Default fallback
+    
     def _ensure_initialized(self):
         """Initialize the injector lazily when first needed"""
         if not self._initialized:
@@ -152,7 +160,7 @@ class InjectionManager:
                                         suspension_start_time = time.time()
                                         log_event(log, "Game suspended immediately", "⏸️", {
                                             "PID": proc.info['pid'],
-                                            "Auto-resume": f"{PERSISTENT_MONITOR_AUTO_RESUME_S:.0f}s"
+                                            "Auto-resume": f"{self._get_monitor_auto_resume_timeout():.0f}s"
                                         })
                                         break
                                     except psutil.AccessDenied:
@@ -189,8 +197,9 @@ class InjectionManager:
                         # Check safety timeout to auto-resume (prevent permanent freeze)
                         if suspension_start_time is not None:
                             elapsed = time.time() - suspension_start_time
-                            if elapsed >= PERSISTENT_MONITOR_AUTO_RESUME_S:
-                                log.warning(f"[monitor] AUTO-RESUME after {PERSISTENT_MONITOR_AUTO_RESUME_S:.0f}s (safety timeout)")
+                            auto_resume_timeout = self._get_monitor_auto_resume_timeout()
+                            if elapsed >= auto_resume_timeout:
+                                log.warning(f"[monitor] AUTO-RESUME after {auto_resume_timeout:.0f}s (safety timeout)")
                                 log.warning(f"[monitor] Injection took too long - releasing game to prevent freeze")
                                 try:
                                     self._suspended_game_process.resume()
@@ -240,7 +249,7 @@ class InjectionManager:
                                     suspension_start_time = time.time()  # Start safety timer
                                     log_event(log, "Game suspended", "⏸️", {
                                         "PID": proc.info['pid'],
-                                        "Auto-resume": f"{PERSISTENT_MONITOR_AUTO_RESUME_S:.0f}s"
+                                        "Auto-resume": f"{self._get_monitor_auto_resume_timeout():.0f}s"
                                     })
                                     break
                                 except psutil.AccessDenied:
