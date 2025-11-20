@@ -8,6 +8,7 @@ Handles the actual skin injection using CSLOL tools
 import subprocess
 import time
 import configparser
+import threading
 from pathlib import Path
 from typing import List, Dict, Optional
 import zipfile
@@ -609,7 +610,7 @@ class SkinInjector:
         
         return copied_mods
     
-    def _mk_run_overlay(self, mod_names: List[str], timeout: int = 60, stop_callback=None, injection_manager=None) -> int:
+    def _mk_run_overlay(self, mod_names: List[str], timeout: int = 120, stop_callback=None, injection_manager=None) -> int:
         """Create and run overlay
         
         Args:
@@ -637,9 +638,12 @@ class SkinInjector:
         gpath = str(self.game_dir)
 
         # Create overlay (this is the actual injection work)
+        # Based on CSLOL source: flags.contains("--ignoreConflict") in main_mod_tools.cpp:332
+        # Documentation: mod-tools.md shows --ignoreConflict flag (camelCase, no --opts: prefix)
         cmd = [
             str(exe), "mkoverlay", str(self.mods_dir), str(overlay_dir),
-            f"--game:{gpath}", f"--mods:{names_str}", "--noTFT"
+            f"--game:{gpath}", f"--mods:{names_str}", "--noTFT",
+            "--ignoreConflict"
         ]
         
         log.debug(f"[INJECT] Creating overlay: {' '.join(cmd)}")
@@ -652,9 +656,9 @@ class SkinInjector:
                 import subprocess
                 creationflags = subprocess.CREATE_NO_WINDOW
             
-            # Don't capture stdout to avoid pipe buffer deadlock - send to devnull instead
+            # Capture both stdout and stderr - CSLOL uses logi() which may write to stdout
             import os
-            proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=creationflags)
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=creationflags, text=True, bufsize=1)
             
             # Boost process priority to maximize CPU contention if enabled
             if ENABLE_PRIORITY_BOOST and PSUTIL_AVAILABLE:
@@ -665,8 +669,44 @@ class SkinInjector:
                 except Exception as e:
                     log.debug(f"[INJECT] Could not boost process priority: {e}")
             
-            # Wait for process to complete (no stdout to read, so no deadlock)
-            proc.wait(timeout=timeout)
+            # Wait for process to complete with timeout
+            # Read both stdout and stderr in separate threads to see what mkoverlay is doing
+            output_lines = []
+            error_lines = []
+            
+            def read_output(pipe, lines_list, prefix):
+                try:
+                    for line in pipe:
+                        if line:
+                            stripped = line.strip()
+                            if stripped:
+                                lines_list.append(stripped)
+                                log.debug(f"[INJECT] mkoverlay {prefix}: {stripped}")
+                except Exception as e:
+                    log.debug(f"[INJECT] Error reading {prefix}: {e}")
+            
+            stdout_thread = threading.Thread(target=read_output, args=(proc.stdout, output_lines, "stdout"), daemon=True)
+            stderr_thread = threading.Thread(target=read_output, args=(proc.stderr, error_lines, "stderr"), daemon=True)
+            stdout_thread.start()
+            stderr_thread.start()
+            
+            try:
+                proc.wait(timeout=timeout)
+                # Give threads a moment to finish reading
+                stdout_thread.join(timeout=1.0)
+                stderr_thread.join(timeout=1.0)
+                if output_lines or error_lines:
+                    log.debug(f"[INJECT] mkoverlay completed - {len(output_lines)} stdout, {len(error_lines)} stderr lines")
+            except subprocess.TimeoutExpired:
+                # Process timed out - log what we have so far
+                all_lines = output_lines + error_lines
+                if all_lines:
+                    log.warning(f"[INJECT] mkoverlay timeout - last output: {'; '.join(all_lines[-10:])}")  # Last 10 lines
+                else:
+                    log.warning("[INJECT] mkoverlay timeout - no output captured")
+                proc.kill()
+                proc.wait()
+                raise
             mkoverlay_duration = time.time() - mkoverlay_start
             
             if proc.returncode != 0:
@@ -765,6 +805,7 @@ class SkinInjector:
             
         try:
             # Build mkoverlay command
+            # Based on CSLOL source: flags.contains("--ignoreConflict") in main_mod_tools.cpp:332
             cmd = [
                 str(self.tools_dir / "mod-tools.exe"),
                 "mkoverlay",
@@ -772,7 +813,8 @@ class SkinInjector:
                 str(self.mods_dir.parent / "overlay"),
                 f"--game:{self.game_dir}",
                 f"--mods:{','.join(mod_names)}",
-                "--noTFT"
+                "--noTFT",
+                "--ignoreConflict"
             ]
             
             log.debug(f"[INJECT] Creating overlay (mkoverlay only): {' '.join(cmd)}")
@@ -814,7 +856,7 @@ class SkinInjector:
             log.error(f"[INJECT] Failed to create mkoverlay command: {e}")
             return -1
     
-    def inject_skin(self, skin_name: str, timeout: int = 60, stop_callback=None, injection_manager=None, chroma_id: int = None, champion_name: str = None, champion_id: int = None) -> bool:
+    def inject_skin(self, skin_name: str, timeout: int = 120, stop_callback=None, injection_manager=None, chroma_id: int = None, champion_name: str = None, champion_id: int = None) -> bool:
         """Inject a single skin (with optional chroma)
         
         Args:

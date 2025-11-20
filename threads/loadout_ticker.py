@@ -222,15 +222,16 @@ class LoadoutTicker(threading.Thread):
                         lcu_skin_id = self.state.selected_skin_id
                         owned_skin_ids = self.state.owned_skin_ids
                         
-                        # Skip injection for base skins
+                        # Skip injection for base skins - inject mods only instead
                         if ui_skin_id == 0:
-                            log.info(f"[INJECT] skipping base skin injection (skinId=0)")
-                            # Resume game if persistent monitor suspended it
+                            log.info(f"[INJECT] skipping base skin injection (skinId=0) - injecting mods only")
+                            # Inject mods only (no skin)
                             if self.injection_manager:
                                 try:
-                                    self.injection_manager.resume_if_suspended()
+                                    self.injection_manager._check_and_inject_mods_only()
                                 except Exception as e:
-                                    log.warning(f"[INJECT] Failed to resume game after skipping base skin: {e}")
+                                    log.warning(f"[INJECT] Failed to inject mods only: {e}")
+                                    self.injection_manager.resume_if_suspended()
                         # Force owned skins/chromas instead of injecting (since owned, we can select them normally)
                         elif ui_skin_id in owned_skin_ids:
                             log.info(f"[INJECT] User owns this skin/chroma (skinId={ui_skin_id}), forcing selection via LCU")

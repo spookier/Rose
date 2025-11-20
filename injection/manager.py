@@ -124,6 +124,62 @@ class InjectionManager:
                 log_section(log, "Game Process Monitor Started", "👁️")
                 suspension_start_time = None
                 
+                # Immediately check for existing game process when monitor starts
+                # This prevents the game from starting before we can suspend it
+                # Do multiple rapid checks to catch the game as soon as it starts
+                log.debug("[monitor] Starting immediate game process checks...")
+                for immediate_check in range(10):  # Check 10 times immediately (very fast)
+                    if not self._monitor_active:
+                        break
+                    try:
+                        for proc in psutil.process_iter(['name', 'pid']):
+                            if not self._monitor_active:
+                                break
+                            if proc.info['name'] == 'League of Legends.exe':
+                                try:
+                                    game_proc = psutil.Process(proc.info['pid'])
+                                    # Check if already suspended
+                                    if game_proc.status() == psutil.STATUS_STOPPED:
+                                        # Already suspended, just track it
+                                        if self._suspended_game_process is None:
+                                            self._suspended_game_process = game_proc
+                                            suspension_start_time = time.time()
+                                            log_event(log, "Game already suspended - tracking", "⏸️", {"PID": proc.info['pid']})
+                                        break
+                                    
+                                    log_event(log, "Game process found - suspending immediately", "🎮", {"PID": proc.info['pid']})
+                                    
+                                    try:
+                                        game_proc.suspend()
+                                        self._suspended_game_process = game_proc
+                                        suspension_start_time = time.time()
+                                        log_event(log, "Game suspended immediately", "⏸️", {
+                                            "PID": proc.info['pid'],
+                                            "Auto-resume": f"{PERSISTENT_MONITOR_AUTO_RESUME_S:.0f}s"
+                                        })
+                                        break
+                                    except psutil.AccessDenied:
+                                        log.error("[monitor] ACCESS DENIED - Cannot suspend game")
+                                        log.error("[monitor] Try running Rose as Administrator")
+                                        self._monitor_active = False
+                                        break
+                                    except Exception as e:
+                                        log.error(f"[monitor] Failed to suspend existing game: {e}")
+                                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                    continue
+                                except Exception as e:
+                                    log.debug(f"[monitor] Error checking existing process: {e}")
+                    except Exception as e:
+                        log.debug(f"[monitor] Error in immediate check {immediate_check}: {e}")
+                    
+                    # If we found and suspended the game, break out of immediate checks
+                    if self._suspended_game_process is not None:
+                        break
+                    
+                    # Very short sleep between immediate checks (5ms)
+                    if immediate_check < 9:  # Don't sleep after last check
+                        time.sleep(0.005)
+                
                 while self._monitor_active:
                     # Don't suspend if runoverlay has already started - exit monitor entirely
                     if self._runoverlay_started:
@@ -161,53 +217,58 @@ class InjectionManager:
                                 self._monitor_active = False
                                 break
                         
-                    # Keep monitoring while game is suspended (wait for runoverlay to finish)
-                    time.sleep(PERSISTENT_MONITOR_IDLE_INTERVAL_S)
-                    continue
+                        # Keep monitoring while game is suspended (wait for runoverlay to finish)
+                        time.sleep(PERSISTENT_MONITOR_IDLE_INTERVAL_S)
+                        continue
                     
-                # Look for game process
-                for proc in psutil.process_iter(['name', 'pid']):
-                    if not self._monitor_active:
-                        break
-                    
-                    if proc.info['name'] == 'League of Legends.exe':
-                        try:
-                            game_proc = psutil.Process(proc.info['pid'])
-                            log_event(log, "Game process found", "🎮", {"PID": proc.info['pid']})
-                            
-                            # Try to suspend immediately
-                            try:
-                                game_proc.suspend()
-                                self._suspended_game_process = game_proc
-                                suspension_start_time = time.time()  # Start safety timer
-                                log_event(log, "Game suspended", "⏸️", {
-                                    "PID": proc.info['pid'],
-                                    "Auto-resume": f"{PERSISTENT_MONITOR_AUTO_RESUME_S:.0f}s"
-                                })
-                                break
-                            except psutil.AccessDenied:
-                                log.error("[monitor] ACCESS DENIED - Cannot suspend game")
-                                log.error("[monitor] Try running Rose as Administrator")
-                                self._monitor_active = False
-                                # Clear reference if we couldn't suspend (game is running anyway)
-                                self._suspended_game_process = None
-                                break
-                            except Exception as e:
-                                log.error(f"[monitor] Failed to suspend: {e}")
-                                # Clear reference on error (game might not be suspended)
-                                self._suspended_game_process = None
-                                break
-                                
-                        except psutil.NoSuchProcess:
-                            continue
-                        except Exception as e:
-                            log.error(f"[monitor] Error: {e}")
-                            # Clear reference on error to prevent leaving game suspended
-                            self._suspended_game_process = None
+                    # Look for game process (in case it starts after monitor begins)
+                    found_processes = []
+                    for proc in psutil.process_iter(['name', 'pid']):
+                        if not self._monitor_active:
                             break
-                
-                # Sleep after checking all processes (not after each process)
-                time.sleep(PERSISTENT_MONITOR_CHECK_INTERVAL_S)
+                        
+                        # Log all processes for debugging (first few iterations only)
+                        if len(found_processes) < 5:
+                            found_processes.append(proc.info.get('name', 'unknown'))
+                        
+                        if proc.info['name'] == 'League of Legends.exe':
+                            try:
+                                game_proc = psutil.Process(proc.info['pid'])
+                                log_event(log, "Game process found", "🎮", {"PID": proc.info['pid']})
+                                
+                                # Try to suspend immediately
+                                try:
+                                    game_proc.suspend()
+                                    self._suspended_game_process = game_proc
+                                    suspension_start_time = time.time()  # Start safety timer
+                                    log_event(log, "Game suspended", "⏸️", {
+                                        "PID": proc.info['pid'],
+                                        "Auto-resume": f"{PERSISTENT_MONITOR_AUTO_RESUME_S:.0f}s"
+                                    })
+                                    break
+                                except psutil.AccessDenied:
+                                    log.error("[monitor] ACCESS DENIED - Cannot suspend game")
+                                    log.error("[monitor] Try running Rose as Administrator")
+                                    self._monitor_active = False
+                                    # Clear reference if we couldn't suspend (game is running anyway)
+                                    self._suspended_game_process = None
+                                    break
+                                except Exception as e:
+                                    log.error(f"[monitor] Failed to suspend: {e}")
+                                    # Clear reference on error (game might not be suspended)
+                                    self._suspended_game_process = None
+                                    break
+                                
+                            except psutil.NoSuchProcess:
+                                continue
+                            except Exception as e:
+                                log.error(f"[monitor] Error: {e}")
+                                # Clear reference on error to prevent leaving game suspended
+                                self._suspended_game_process = None
+                                break
+                    
+                    # Sleep after checking all processes (not after each process)
+                    time.sleep(PERSISTENT_MONITOR_CHECK_INTERVAL_S)
                 
                 log.debug("[monitor] Stopped")
                 
@@ -439,6 +500,27 @@ class InjectionManager:
             stop_callback: Callback to check if injection should stop
             chroma_id: Optional chroma ID for chroma variant
         """
+        # Check if this is a base skin (skin_0 or skin name ending with base/default indicators)
+        # If skin_name starts with "skin_" and the ID is 0 or matches base skin pattern, inject mods only
+        if skin_name and skin_name.startswith("skin_"):
+            try:
+                skin_id_str = skin_name.split("_")[1] if "_" in skin_name else None
+                if skin_id_str:
+                    skin_id = int(skin_id_str)
+                    # Check if this is a base skin (skin ID 0 or champion's base skin ID like 36000 for champ 36)
+                    # Base skins typically have ID = champion_id * 1000
+                    if skin_id == 0:
+                        log.info(f"[INJECT] Base skin detected (skinId=0) - injecting mods only instead")
+                        self._check_and_inject_mods_only()
+                        return False
+                    # Check if it matches base skin pattern (champion_id * 1000)
+                    if champion_id and skin_id == champion_id * 1000:
+                        log.info(f"[INJECT] Base skin detected (skinId={skin_id} for champion {champion_id}) - injecting mods only instead")
+                        self._check_and_inject_mods_only()
+                        return False
+            except (ValueError, IndexError):
+                pass  # Not a numeric skin ID, continue with normal injection
+        
         self._ensure_initialized()
         self.refresh_injection_threshold()
         
