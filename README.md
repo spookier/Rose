@@ -302,6 +302,14 @@ The use of custom skin tools may violate Riot Games' Terms of Service. Users pro
 
 Custom skins are allowed under Riot's terms of service and do not trigger detection as long as you are not discussing or advertising the use of the skins within the game.
 
+## Support
+
+If you enjoy Rose and want to support its development:
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/roseapp)
+
+Your support helps keep the project alive and motivates continued development!
+
 ---
 
 **Rose** - _League, unlocked._
