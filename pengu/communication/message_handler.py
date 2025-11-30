@@ -388,12 +388,25 @@ class MessageHandler:
             log.error(f"[SkinMonitor] Failed to list maps: {exc}")
             maps = []
         
+        # Get historic mod and add it to response
+        historic_map_path = None
+        try:
+            from utils.core.mod_historic import get_historic_mod
+            historic_map_path = get_historic_mod("map")
+        except Exception:
+            pass
+        
         response_payload = {
             "type": "maps-response",
             "maps": maps,
+            "historicMod": historic_map_path,  # Add historic mod identifier
             "timestamp": int(time.time() * 1000),
         }
         self._send_response(json.dumps(response_payload))
+        
+        # Auto-select historic mod if available and not already selected
+        if historic_map_path and not getattr(self.shared_state, 'selected_map_mod', None):
+            self._auto_select_historic_mod("map", historic_map_path, maps)
     
     def _handle_request_fonts(self, payload: dict) -> None:
         """Return the list of fonts"""
@@ -406,12 +419,25 @@ class MessageHandler:
             log.error(f"[SkinMonitor] Failed to list fonts: {exc}")
             fonts = []
         
+        # Get historic mod and add it to response
+        historic_font_path = None
+        try:
+            from utils.core.mod_historic import get_historic_mod
+            historic_font_path = get_historic_mod("font")
+        except Exception:
+            pass
+        
         response_payload = {
             "type": "fonts-response",
             "fonts": fonts,
+            "historicMod": historic_font_path,  # Add historic mod identifier
             "timestamp": int(time.time() * 1000),
         }
         self._send_response(json.dumps(response_payload))
+        
+        # Auto-select historic mod if available and not already selected
+        if historic_font_path and not getattr(self.shared_state, 'selected_font_mod', None):
+            self._auto_select_historic_mod("font", historic_font_path, fonts)
     
     def _handle_request_announcers(self, payload: dict) -> None:
         """Return the list of announcers"""
@@ -424,12 +450,25 @@ class MessageHandler:
             log.error(f"[SkinMonitor] Failed to list announcers: {exc}")
             announcers = []
         
+        # Get historic mod and add it to response
+        historic_announcer_path = None
+        try:
+            from utils.core.mod_historic import get_historic_mod
+            historic_announcer_path = get_historic_mod("announcer")
+        except Exception:
+            pass
+        
         response_payload = {
             "type": "announcers-response",
             "announcers": announcers,
+            "historicMod": historic_announcer_path,  # Add historic mod identifier
             "timestamp": int(time.time() * 1000),
         }
         self._send_response(json.dumps(response_payload))
+        
+        # Auto-select historic mod if available and not already selected
+        if historic_announcer_path and not getattr(self.shared_state, 'selected_announcer_mod', None):
+            self._auto_select_historic_mod("announcer", historic_announcer_path, announcers)
     
     def _handle_request_others(self, payload: dict) -> None:
         """Return the list of others"""
@@ -442,12 +481,25 @@ class MessageHandler:
             log.error(f"[SkinMonitor] Failed to list others: {exc}")
             others = []
         
+        # Get historic mod and add it to response
+        historic_other_path = None
+        try:
+            from utils.core.mod_historic import get_historic_mod
+            historic_other_path = get_historic_mod("other")
+        except Exception:
+            pass
+        
         response_payload = {
             "type": "others-response",
             "others": others,
+            "historicMod": historic_other_path,  # Add historic mod identifier
             "timestamp": int(time.time() * 1000),
         }
         self._send_response(json.dumps(response_payload))
+        
+        # Auto-select historic mod if available and not already selected
+        if historic_other_path and not getattr(self.shared_state, 'selected_other_mod', None):
+            self._auto_select_historic_mod("other", historic_other_path, others)
     
     def _handle_select_skin_mod(self, payload: dict) -> None:
         """Handle mod selection for injection over hovered skin"""
@@ -600,6 +652,13 @@ class MessageHandler:
             if hasattr(self.shared_state, 'selected_map_mod') and self.shared_state.selected_map_mod:
                 self.shared_state.selected_map_mod = None
                 log.info(f"[SkinMonitor] Map mod deselected")
+                # Clear historic mod when deselected
+                try:
+                    from utils.core.mod_historic import clear_historic_mod
+                    clear_historic_mod("map")
+                    log.debug("[MOD_HISTORIC] Cleared historic map mod")
+                except Exception as e:
+                    log.debug(f"[MOD_HISTORIC] Failed to clear historic map mod: {e}")
             return
         
         try:
@@ -709,6 +768,13 @@ class MessageHandler:
             if hasattr(self.shared_state, 'selected_font_mod') and self.shared_state.selected_font_mod:
                 self.shared_state.selected_font_mod = None
                 log.info(f"[SkinMonitor] Font mod deselected")
+                # Clear historic mod when deselected
+                try:
+                    from utils.core.mod_historic import clear_historic_mod
+                    clear_historic_mod("font")
+                    log.debug("[MOD_HISTORIC] Cleared historic font mod")
+                except Exception as e:
+                    log.debug(f"[MOD_HISTORIC] Failed to clear historic font mod: {e}")
             return
         
         try:
@@ -817,6 +883,13 @@ class MessageHandler:
             if hasattr(self.shared_state, 'selected_announcer_mod') and self.shared_state.selected_announcer_mod:
                 self.shared_state.selected_announcer_mod = None
                 log.info(f"[SkinMonitor] Announcer mod deselected")
+                # Clear historic mod when deselected
+                try:
+                    from utils.core.mod_historic import clear_historic_mod
+                    clear_historic_mod("announcer")
+                    log.debug("[MOD_HISTORIC] Cleared historic announcer mod")
+                except Exception as e:
+                    log.debug(f"[MOD_HISTORIC] Failed to clear historic announcer mod: {e}")
             return
         
         try:
@@ -925,6 +998,13 @@ class MessageHandler:
             if hasattr(self.shared_state, 'selected_other_mod') and self.shared_state.selected_other_mod:
                 self.shared_state.selected_other_mod = None
                 log.info(f"[SkinMonitor] Other mod deselected")
+                # Clear historic mod when deselected
+                try:
+                    from utils.core.mod_historic import clear_historic_mod
+                    clear_historic_mod("other")
+                    log.debug("[MOD_HISTORIC] Cleared historic other mod")
+                except Exception as e:
+                    log.debug(f"[MOD_HISTORIC] Failed to clear historic other mod: {e}")
             return
         
         try:
@@ -1120,6 +1200,54 @@ class MessageHandler:
         
         self.skin_processor.last_skin_name = skin_name
         self.skin_processor.process_skin_name(skin_name, self.broadcaster)
+    
+    def _auto_select_historic_mod(self, mod_type: str, historic_path: str, mod_list: list) -> None:
+        """Auto-select a historic mod if it exists in the mod list
+        
+        Args:
+            mod_type: One of "map", "font", "announcer", "other"
+            historic_path: Relative path to the historic mod
+            mod_list: List of available mods (dicts with id, name, path, etc.)
+        """
+        try:
+            # Find the mod in the list by matching relative path
+            selected_mod_dict = None
+            for mod_dict in mod_list:
+                mod_id = mod_dict.get("id") or mod_dict.get("relativePath") or ""
+                # Normalize paths for comparison
+                if mod_id.replace("\\", "/") == historic_path.replace("\\", "/"):
+                    selected_mod_dict = mod_dict
+                    break
+            
+            if not selected_mod_dict:
+                log.debug(f"[MOD_HISTORIC] Historic {mod_type} mod not found in available mods: {historic_path}")
+                return
+            
+            # Create a payload to trigger selection (similar to what frontend would send)
+            if mod_type == "map":
+                self._handle_select_map({
+                    "mapId": selected_mod_dict.get("id") or selected_mod_dict.get("name"),
+                    "mapData": selected_mod_dict
+                })
+            elif mod_type == "font":
+                self._handle_select_font({
+                    "fontId": selected_mod_dict.get("id") or selected_mod_dict.get("name"),
+                    "fontData": selected_mod_dict
+                })
+            elif mod_type == "announcer":
+                self._handle_select_announcer({
+                    "announcerId": selected_mod_dict.get("id") or selected_mod_dict.get("name"),
+                    "announcerData": selected_mod_dict
+                })
+            elif mod_type == "other":
+                self._handle_select_other({
+                    "otherId": selected_mod_dict.get("id") or selected_mod_dict.get("name"),
+                    "otherData": selected_mod_dict
+                })
+            
+            log.info(f"[MOD_HISTORIC] Auto-selected historic {mod_type} mod: {selected_mod_dict.get('name', historic_path)}")
+        except Exception as e:
+            log.debug(f"[MOD_HISTORIC] Failed to auto-select historic {mod_type} mod: {e}")
     
     def _send_response(self, message: str) -> None:
         """Send response message to clients"""

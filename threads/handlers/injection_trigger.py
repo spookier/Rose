@@ -690,6 +690,36 @@ class InjectionTrigger:
                 log.info(f"   ⚠️  Verify in-game - timing determines if mod appears")
                 log.info("=" * LOG_SEPARATOR_WIDTH)
                 
+                # Store mod selections in historic before clearing
+                try:
+                    from utils.core.mod_historic import write_historic_mod
+                    
+                    # Store map mod if selected
+                    selected_map_mod = getattr(self.state, 'selected_map_mod', None)
+                    if selected_map_mod and selected_map_mod.get("relative_path"):
+                        write_historic_mod("map", selected_map_mod["relative_path"])
+                        log.debug(f"[MOD_HISTORIC] Stored map mod: {selected_map_mod['relative_path']}")
+                    
+                    # Store font mod if selected
+                    selected_font_mod = getattr(self.state, 'selected_font_mod', None)
+                    if selected_font_mod and selected_font_mod.get("relative_path"):
+                        write_historic_mod("font", selected_font_mod["relative_path"])
+                        log.debug(f"[MOD_HISTORIC] Stored font mod: {selected_font_mod['relative_path']}")
+                    
+                    # Store announcer mod if selected
+                    selected_announcer_mod = getattr(self.state, 'selected_announcer_mod', None)
+                    if selected_announcer_mod and selected_announcer_mod.get("relative_path"):
+                        write_historic_mod("announcer", selected_announcer_mod["relative_path"])
+                        log.debug(f"[MOD_HISTORIC] Stored announcer mod: {selected_announcer_mod['relative_path']}")
+                    
+                    # Store other mod if selected
+                    selected_other_mod = getattr(self.state, 'selected_other_mod', None)
+                    if selected_other_mod and selected_other_mod.get("relative_path"):
+                        write_historic_mod("other", selected_other_mod["relative_path"])
+                        log.debug(f"[MOD_HISTORIC] Stored other mod: {selected_other_mod['relative_path']}")
+                except Exception as e:
+                    log.debug(f"[MOD_HISTORIC] Failed to store mod selections: {e}")
+                
                 # Clear all selected mods after successful injection
                 self.state.selected_custom_mod = None
                 if hasattr(self.state, 'selected_map_mod'):
