@@ -836,6 +836,8 @@ class InjectionTrigger:
             # Emit timing info (INFO so it shows up in normal customer logs).
             # Also, if forcing base skin was slow compared to injection threshold, write an issue entry.
             # This helps diagnose cases where LCU is laggy and skin injection timing gets tight.
+            dt_force_s = None
+            threshold_s = None
             if base_skin_set_successfully:
                 try:
                     if self.injection_manager is not None:
@@ -869,6 +871,29 @@ class InjectionTrigger:
                             current_skin = player.get("selectedSkinId")
                             if current_skin != base_skin_id:
                                 log.warning(f"[INJECT] Base skin verification failed: {current_skin} != {base_skin_id}")
+                                try:
+                                    # Reuse the same "recommended threshold" logic (based on observed base-skin force time)
+                                    # by emitting a hint line that includes both values in the same format as BASE_SKIN_FORCE_SLOW.
+                                    hint = "Retry your skin selection. If the warning persists, increase Injection Threshold."
+                                    if isinstance(dt_force_s, (int, float)) and isinstance(threshold_s, (int, float)):
+                                        hint = (
+                                            f"Base skin force time: {float(dt_force_s):.3f}s, "
+                                            f"injection threshold: {float(threshold_s):.3f}s. "
+                                            f"Increase Injection Threshold until the warning is gone, then retry."
+                                        )
+                                    report_issue(
+                                        "BASE_SKIN_VERIFY_FAILED",
+                                        "warning",
+                                        "Base skin verification failed (selected skin may not apply).",
+                                        hint=hint,
+                                        details={
+                                            "expected_skin_id": str(base_skin_id),
+                                            "actual_skin_id": str(current_skin),
+                                        },
+                                        dedupe_window_s=60.0,
+                                    )
+                                except Exception:
+                                    pass
                             else:
                                 log.info(f"[INJECT] ✓ Base skin verified: {current_skin}")
                             break

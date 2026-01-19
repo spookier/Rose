@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import time
@@ -128,6 +129,8 @@ class MessageHandler:
             self._handle_diagnostics_request(payload)
         elif payload_type == "diagnostics-clear":
             self._handle_diagnostics_clear(payload)
+        elif payload_type == "diagnostics-clear-category":
+            self._handle_diagnostics_clear_category(payload)
         elif payload_type == "open-pengu-loader-ui":
             self._handle_open_pengu_loader_ui(payload)
         elif payload_type == "settings-save":
@@ -319,6 +322,99 @@ class MessageHandler:
             except Exception:
                 pass
 
+    def _handle_diagnostics_clear_category(self, payload: dict) -> None:
+        """
+        Clear only a diagnostics category from rose_issues.txt.
+        Categories:
+          - injection_threshold
+          - monitor_timeout
+        """
+        try:
+            cats = payload.get("categories") or []
+            if isinstance(cats, str):
+                cats = [cats]
+            if payload.get("category"):
+                cats.append(payload.get("category"))
+
+            norm: set[str] = set()
+            for c in cats:
+                cl = str(c or "").strip().lower()
+                if not cl:
+                    continue
+                if cl in ("injection_threshold", "threshold", "injection"):
+                    norm.add("injection_threshold")
+                elif cl in ("monitor_timeout", "monitor", "monitor_auto_resume_timeout", "auto_resume"):
+                    norm.add("monitor_timeout")
+
+            ok = self._clear_issues_categories(norm) if norm else False
+            self._send_response(
+                json.dumps(
+                    {
+                        "type": "diagnostics-cleared-category",
+                        "success": bool(ok),
+                        "categories": sorted(norm),
+                    }
+                )
+            )
+        except Exception as e:
+            log.error(f"[SkinMonitor] Failed to clear diagnostics category: {e}")
+            try:
+                self._send_response(json.dumps({"type": "diagnostics-cleared-category", "success": False, "categories": []}))
+            except Exception:
+                pass
+
+    def _clear_issues_categories(self, categories: set[str]) -> bool:
+        """Remove matching diagnostics entries from rose_issues.txt (best-effort)."""
+        try:
+            if not categories:
+                return False
+            p = get_user_data_dir() / "rose_issues.txt"
+            if not p.exists():
+                return True
+
+            txt = p.read_text(encoding="utf-8", errors="ignore").splitlines()
+
+            # Parse file into entry blocks: ["ts | msg", optional "Fix: ..."]
+            blocks: list[tuple[str, str]] = []
+            i = 0
+            while i < len(txt):
+                line = (txt[i] or "").rstrip()
+                if " | " in line:
+                    msg = line
+                    fix = ""
+                    if i + 1 < len(txt):
+                        nxt = (txt[i + 1] or "").rstrip()
+                        if nxt.startswith("Fix:"):
+                            fix = nxt
+                            i += 1
+                    blocks.append((msg, fix))
+                i += 1
+
+            def _cat_for(msg_line: str, fix_line: str) -> str:
+                ml = (msg_line or "").lower()
+                fl = (fix_line or "").lower()
+                # Match the same categories we summarize
+                if "auto-resume safety" in ml or "monitor auto-resume timeout" in fl:
+                    return "monitor_timeout"
+                if "base skin forcing took longer" in ml or "injection threshold" in ml or "injection threshold" in fl or "base skin force time" in fl:
+                    return "injection_threshold"
+                return "other"
+
+            kept_lines: list[str] = []
+            for msg_line, fix_line in blocks:
+                cat = _cat_for(msg_line, fix_line)
+                if cat in categories:
+                    continue
+                kept_lines.append(msg_line)
+                if fix_line:
+                    kept_lines.append(fix_line)
+
+            # Preserve trailing newline style expected by the reader
+            p.write_text("\n".join(kept_lines) + ("\n" if kept_lines else ""), encoding="utf-8", errors="ignore")
+            return True
+        except Exception:
+            return False
+
     def _handle_diagnostics_request(self, payload: dict) -> None:
         """
         Return a compact, user-friendly list of recent errors, derived from rose_issues.txt.
@@ -381,7 +477,7 @@ class MessageHandler:
                     pass
                 return ts_part
 
-            def _summarize(msg: str, fix: str) -> Optional[str]:
+            def _summarize(msg: str, fix: str) -> Optional[dict]:
                 ml = (msg or "").lower()
                 fl = (fix or "").lower()
 
@@ -389,28 +485,100 @@ class MessageHandler:
                 if "injection skipped" in ml and "base skin selected" in ml:
                     return None
 
+                # Parse helper(s)
+                def _extract_first_seconds(text: str) -> Optional[float]:
+                    try:
+                        m = re.search(r"after\s+(\d+(?:\.\d+)?)\s*s", text, flags=re.IGNORECASE)
+                        if not m:
+                            return None
+                        return float(m.group(1))
+                    except Exception:
+                        return None
+
+                def _clamp(v: float, lo: float, hi: float) -> float:
+                    try:
+                        return max(lo, min(hi, float(v)))
+                    except Exception:
+                        return float(lo)
+
+                # Category: Monitor Auto-Resume Timeout (AUTO_RESUME_TRIGGERED)
                 if "monitor auto-resume timeout" in fl or "auto-resume safety" in ml:
-                    return "Monitor Auto-Resume Timeout → increase"
-                if "injection threshold" in ml or "injection threshold" in fl:
-                    return "Injection Threshold → increase"
+                    observed = _extract_first_seconds(msg or "")  # from "after 60s"
+                    recommended = None
+                    if isinstance(observed, (int, float)):
+                        recommended = int(_clamp(max(float(observed) + 30.0, 60.0), 1.0, 180.0))
+                    return {
+                        "code": "AUTO_RESUME_TRIGGERED",
+                        "text": "Monitor Auto-Resume Timeout → increase",
+                        "observedTimeoutS": observed,
+                        "recommendedMonitorTimeoutS": recommended,
+                    }
+
+                # Category: Injection Threshold (BASE_SKIN_FORCE_SLOW)
+                if "injection threshold" in ml or "injection threshold" in fl or "base skin force time" in fl:
+                    force_ms = None
+                    thresh_ms = None
+                    try:
+                        # Example hints:
+                        # - "Fix: Base skin force time: 0.800s, injection threshold: 0.500s. ..."
+                        # - "Fix: Base skin force time: 800ms, injection threshold: 500ms. ..."
+                        # We accept either unit and normalize to ms.
+                        m = re.search(
+                            r"base skin force time:\s*([0-9.]+)\s*(ms|s)\s*[,)]?\s*.*?"
+                            r"injection threshold:\s*([0-9.]+)\s*(ms|s)",
+                            fix or "",
+                            flags=re.IGNORECASE,
+                        )
+                        if m:
+                            force_v = float(m.group(1))
+                            force_u = (m.group(2) or "").lower()
+                            thresh_v = float(m.group(3))
+                            thresh_u = (m.group(4) or "").lower()
+
+                            force_ms = int(round(force_v * (1000.0 if force_u == "s" else 1.0)))
+                            thresh_ms = int(round(thresh_v * (1000.0 if thresh_u == "s" else 1.0)))
+                    except Exception:
+                        force_ms = None
+                        thresh_ms = None
+
+                    # Recommend in ms:
+                    #   recommended = clamp(max(observed + 250ms, 500ms), 1ms, 2000ms)
+                    # UI expects seconds, so also provide recommendedThresholdS.
+                    recommended_ms = None
+                    if isinstance(force_ms, (int, float)) and force_ms is not None:
+                        recommended_ms = int(_clamp(max(float(force_ms) + 250.0, 500.0), 1.0, 2000.0))
+                    recommended_s = (float(recommended_ms) / 1000.0) if isinstance(recommended_ms, int) else None
+                    code_out = "BASE_SKIN_VERIFY_FAILED" if ("verification failed" in ml) else "BASE_SKIN_FORCE_SLOW"
+                    return {
+                        "code": code_out,
+                        "text": "Injection Threshold → increase",
+                        "baseSkinForceTimeMs": force_ms,
+                        "injectionThresholdAtTimeMs": thresh_ms,
+                        "recommendedThresholdMs": recommended_ms,
+                        "recommendedThresholdS": recommended_s,
+                    }
 
                 # Fallback: keep it short
                 short = msg.strip()
                 if len(short) > 60:
                     short = short[:57] + "..."
-                return short or None
+                return {"code": "", "text": short or ""} if (short or "") else None
 
             # Keep last N unique summaries (most recent occurrences)
             seen: set[str] = set()
             out: list[dict] = []
             for ent in reversed(entries):
-                summary = _summarize(ent.get("msg", ""), ent.get("fix", ""))
-                if not summary:
+                summary_obj = _summarize(ent.get("msg", ""), ent.get("fix", ""))
+                if not summary_obj:
                     continue
-                if summary in seen:
+                summary_text = (summary_obj.get("text") or "").strip()
+                if not summary_text:
                     continue
-                seen.add(summary)
-                out.append({"ts": _format_ts(ent.get("ts", "")), "text": summary})
+                if summary_text in seen:
+                    continue
+                seen.add(summary_text)
+                payload = {"ts": _format_ts(ent.get("ts", "")), **summary_obj}
+                out.append(payload)
                 if len(out) >= 8:
                     break
             out.reverse()
