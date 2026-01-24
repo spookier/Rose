@@ -840,10 +840,50 @@ class MessageHandler:
 
         # Handle deselection (mod_id is null)
         if mod_id is None:
-            # Clear selected mod if it matches this skin
-            if (hasattr(self.shared_state, 'selected_custom_mod') and 
-                self.shared_state.selected_custom_mod and 
-                self.shared_state.selected_custom_mod.get("skin_id") == skin_id):
+            # Clear selected mod if it matches this skin, and remove extracted files so it
+            # doesn't keep injecting after being unchecked.
+            if (
+                hasattr(self.shared_state, "selected_custom_mod")
+                and self.shared_state.selected_custom_mod
+                and self.shared_state.selected_custom_mod.get("skin_id") == skin_id
+            ):
+                # If this mod was saved as "historic" for auto-selection, clear it too.
+                # Otherwise InjectionTrigger will auto-reselect it at injection time.
+                try:
+                    from utils.core.historic import (
+                        clear_historic_entry,
+                        get_historic_skin_for_champion,
+                        is_custom_mod_path,
+                        get_custom_mod_path,
+                    )
+
+                    champ_id = self.shared_state.selected_custom_mod.get("champion_id")
+                    rel_path = self.shared_state.selected_custom_mod.get("relative_path")
+                    if champ_id and rel_path:
+                        historic_value = get_historic_skin_for_champion(int(champ_id))
+                        if historic_value is not None and is_custom_mod_path(historic_value):
+                            historic_path = get_custom_mod_path(historic_value)
+                            if historic_path and historic_path.replace("\\", "/") == str(rel_path).replace("\\", "/"):
+                                clear_historic_entry(int(champ_id))
+                                log.info("[HISTORIC] Cleared saved custom mod for champion %s", champ_id)
+                except Exception as exc:
+                    log.debug("[HISTORIC] Failed to clear saved custom mod on deselect: %s", exc)
+
+                # Best-effort cleanup: remove the extracted mod folder only (do NOT wipe other mods).
+                try:
+                    mod_folder_name = self.shared_state.selected_custom_mod.get("mod_folder_name")
+                    injector = getattr(getattr(self.injection_manager, "injector", None), "mods_dir", None)
+                    if mod_folder_name and self.injection_manager and getattr(self.injection_manager, "injector", None):
+                        import shutil
+
+                        mods_dir = self.injection_manager.injector.mods_dir
+                        extracted_path = mods_dir / str(mod_folder_name)
+                        if extracted_path.exists():
+                            shutil.rmtree(extracted_path, ignore_errors=True)
+                            log.info("[SkinMonitor] Removed extracted custom mod folder: %s", extracted_path)
+                except Exception as exc:
+                    log.debug("[SkinMonitor] Failed to cleanup extracted custom mod on deselect: %s", exc)
+
                 self.shared_state.selected_custom_mod = None
                 log.info(f"[SkinMonitor] Custom mod deselected for skin {skin_id}")
             return

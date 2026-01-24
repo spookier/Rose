@@ -83,6 +83,22 @@ def write_historic_entry(champion_id: int, skin_or_chroma_id: Union[int, str]) -
         pass
 
 
+def clear_historic_entry(champion_id: int) -> None:
+    """Remove the historic entry for a champion if it exists."""
+    try:
+        p = _historic_file_path()
+        m = load_historic_map()
+        key = str(int(champion_id))
+        if key in m:
+            m.pop(key, None)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            with p.open("w", encoding="utf-8") as f:
+                json.dump(m, f, ensure_ascii=False, indent=2)
+    except Exception:
+        # Best-effort; ignore errors
+        pass
+
+
 def is_custom_mod_path(value: Union[int, str]) -> bool:
     """Check if a historic value is a custom mod path.
     
