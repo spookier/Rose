@@ -6,6 +6,7 @@ All arbitrary values are centralized here for easy tracking and modification
 """
 
 import shutil
+import sys
 from typing import TYPE_CHECKING, Optional, Tuple
 from pathlib import Path
 import configparser
@@ -16,7 +17,7 @@ from utils.core.paths import get_user_data_dir
 # APPLICATION METADATA
 # =============================================================================
 
-APP_VERSION = "1.1.6"                          # Application version
+APP_VERSION = "1.1.7"                          # Application version
 APP_USER_AGENT = f"Rose/{APP_VERSION}"  # User-Agent header for HTTP requests
 
 _CONFIG = configparser.ConfigParser()
@@ -269,7 +270,10 @@ WINDOWS_DPI_AWARENESS_SYSTEM = 1         # PROCESS_SYSTEM_DPI_AWARE
 LOCK_FILE_NAME = "rose.lock"
 
 # NEW: Windows named mutex for single-instance (per-user/session)
-SINGLE_INSTANCE_MUTEX_NAME = r"Local\RoseSingleInstance"
+_IS_DEV_BUILD = bool(getattr(sys, "frozen", False)) and (
+    "rosedev" in Path(sys.executable).stem.lower() or "rose-dev" in Path(sys.executable).stem.lower()
+)
+SINGLE_INSTANCE_MUTEX_NAME = r"Local\RoseDevSingleInstance" if _IS_DEV_BUILD else r"Local\RoseSingleInstance"
 
 # Log file patterns (handles .log files)
 LOG_FILE_PATTERN = "rose_*.log*"
