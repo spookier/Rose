@@ -48,9 +48,14 @@ env/
 ENV/
 .venv
 
-# IDE
+# IDE / Editor
 .vscode/
 .idea/
+.claude/settings.local.json
+
+# Local / temp
+vibeship-ai-fix-prompt-383e53c2-917d-4722-b35e-0f17148c8af5.txt
+temp_fix.txt
 *.swp
 *.swo
 *~
