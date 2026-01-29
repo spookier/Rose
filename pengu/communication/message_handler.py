@@ -19,9 +19,9 @@ from typing import Optional
 
 from config import get_config_float, get_config_option, set_config_option
 from injection.mods.storage import ModStorageService
-from utils.core.paths import get_user_data_dir, get_asset_path
+from utils.core.paths import get_user_data_dir, get_asset_path, get_injection_dir
 from utils.core.issue_reporter import clear_issues, read_issues_tail
-from utils.core.safe_extract import safe_extractall
+from utils.core.junction import is_junction, safe_remove_entry, link_or_extract
 from utils.system.admin_utils import (
     is_admin,
     is_registered_for_autostart,
@@ -875,12 +875,10 @@ class MessageHandler:
                     mod_folder_name = self.shared_state.selected_custom_mod.get("mod_folder_name")
                     injector = getattr(getattr(self.injection_manager, "injector", None), "mods_dir", None)
                     if mod_folder_name and self.injection_manager and getattr(self.injection_manager, "injector", None):
-                        import shutil
-
                         mods_dir = self.injection_manager.injector.mods_dir
                         extracted_path = mods_dir / str(mod_folder_name)
-                        if extracted_path.exists():
-                            shutil.rmtree(extracted_path, ignore_errors=True)
+                        if extracted_path.exists() or is_junction(extracted_path):
+                            safe_remove_entry(extracted_path)
                             log.info("[SkinMonitor] Removed extracted custom mod folder: %s", extracted_path)
                 except Exception as exc:
                     log.debug("[SkinMonitor] Failed to cleanup extracted custom mod on deselect: %s", exc)
@@ -928,8 +926,6 @@ class MessageHandler:
                 mod_folder_name = mod_source.stem
 
             # Extract/copy mod to injection mods directory immediately
-            import shutil
-            
             # Check if other mods (map/font/announcer/other) are already selected
             # If so, don't clean - just extract the skin mod alongside them
             selected_other_mods = getattr(self.shared_state, 'selected_other_mods', None)
@@ -951,28 +947,17 @@ class MessageHandler:
             else:
                 log.info("[SkinMonitor] Other mods selected - keeping existing mods and adding skin mod")
             
+            extract_cache_dir = get_injection_dir() / ".extract_cache"
             if mod_source.is_dir():
                 mod_dest = injector.mods_dir / mod_source.name
-                shutil.copytree(mod_source, mod_dest, dirs_exist_ok=True)
-                log.info(f"[SkinMonitor] Copied mod directory to: {mod_dest}")
             elif mod_source.is_file() and mod_source.suffix.lower() in {".zip", ".fantome"}:
-                # Extract ZIP or FANTOME file
                 mod_dest = injector.mods_dir / mod_source.stem
-                if mod_dest.exists():
-                    shutil.rmtree(mod_dest, ignore_errors=True)
-                mod_dest.mkdir(parents=True, exist_ok=True)
-                # Security: Use safe extraction to prevent path traversal attacks
-                safe_extractall(mod_source, mod_dest)
-                file_type = "ZIP" if mod_source.suffix.lower() == ".zip" else "FANTOME"
-                log.info(f"[SkinMonitor] Extracted {file_type} mod to: {mod_dest}")
             else:
-                # For other file types, create folder and copy file
                 mod_dest = injector.mods_dir / mod_folder_name
-                if mod_dest.exists():
-                    shutil.rmtree(mod_dest, ignore_errors=True)
-                mod_dest.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(mod_source, mod_dest / mod_source.name)
-                log.info(f"[SkinMonitor] Copied mod file to folder: {mod_dest}")
+            if mod_dest.exists() or is_junction(mod_dest):
+                safe_remove_entry(mod_dest)
+            link_or_extract(mod_source, mod_dest, cache_dir=extract_cache_dir)
+            log.info(f"[SkinMonitor] Linked/extracted mod to: {mod_dest}")
 
             # Store selected mod in shared state for injection trigger
             # Include the extracted folder name so injection knows what to use
@@ -1075,35 +1060,20 @@ class MessageHandler:
                 mod_folder_name = mod_source.stem
 
             # Extract/copy mod to injection mods directory immediately
-            import shutil
-            
             # Don't clean mods directory - we want to keep skin mod if it exists
             # Just ensure the map mod is extracted
             
+            extract_cache_dir = get_injection_dir() / ".extract_cache"
             if mod_source.is_dir():
                 mod_dest = injector.mods_dir / mod_source.name
-                if mod_dest.exists():
-                    shutil.rmtree(mod_dest, ignore_errors=True)
-                shutil.copytree(mod_source, mod_dest, dirs_exist_ok=True)
-                log.info(f"[SkinMonitor] Copied map mod directory to: {mod_dest}")
             elif mod_source.is_file() and mod_source.suffix.lower() in {".zip", ".fantome"}:
-                # Extract ZIP or FANTOME file
                 mod_dest = injector.mods_dir / mod_source.stem
-                if mod_dest.exists():
-                    shutil.rmtree(mod_dest, ignore_errors=True)
-                mod_dest.mkdir(parents=True, exist_ok=True)
-                # Security: Use safe extraction to prevent path traversal attacks
-                safe_extractall(mod_source, mod_dest)
-                file_type = "ZIP" if mod_source.suffix.lower() == ".zip" else "FANTOME"
-                log.info(f"[SkinMonitor] Extracted {file_type} map mod to: {mod_dest}")
             else:
-                # For other file types, create folder and copy file
                 mod_dest = injector.mods_dir / mod_folder_name
-                if mod_dest.exists():
-                    shutil.rmtree(mod_dest, ignore_errors=True)
-                mod_dest.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(mod_source, mod_dest / mod_source.name)
-                log.info(f"[SkinMonitor] Copied map mod file to folder: {mod_dest}")
+            if mod_dest.exists() or is_junction(mod_dest):
+                safe_remove_entry(mod_dest)
+            link_or_extract(mod_source, mod_dest, cache_dir=extract_cache_dir)
+            log.info(f"[SkinMonitor] Linked/extracted map mod to: {mod_dest}")
 
             # Store selected map mod in shared state for injection
             self.shared_state.selected_map_mod = {
@@ -1190,34 +1160,19 @@ class MessageHandler:
                 mod_folder_name = mod_source.stem
 
             # Extract/copy mod to injection mods directory immediately
-            import shutil
-            
             # Don't clean mods directory - we want to keep skin/map mods if they exist
             
+            extract_cache_dir = get_injection_dir() / ".extract_cache"
             if mod_source.is_dir():
                 mod_dest = injector.mods_dir / mod_source.name
-                if mod_dest.exists():
-                    shutil.rmtree(mod_dest, ignore_errors=True)
-                shutil.copytree(mod_source, mod_dest, dirs_exist_ok=True)
-                log.info(f"[SkinMonitor] Copied font mod directory to: {mod_dest}")
             elif mod_source.is_file() and mod_source.suffix.lower() in {".zip", ".fantome"}:
-                # Extract ZIP or FANTOME file
                 mod_dest = injector.mods_dir / mod_source.stem
-                if mod_dest.exists():
-                    shutil.rmtree(mod_dest, ignore_errors=True)
-                mod_dest.mkdir(parents=True, exist_ok=True)
-                # Security: Use safe extraction to prevent path traversal attacks
-                safe_extractall(mod_source, mod_dest)
-                file_type = "ZIP" if mod_source.suffix.lower() == ".zip" else "FANTOME"
-                log.info(f"[SkinMonitor] Extracted {file_type} font mod to: {mod_dest}")
             else:
-                # For other file types, create folder and copy file
                 mod_dest = injector.mods_dir / mod_folder_name
-                if mod_dest.exists():
-                    shutil.rmtree(mod_dest, ignore_errors=True)
-                mod_dest.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(mod_source, mod_dest / mod_source.name)
-                log.info(f"[SkinMonitor] Copied font mod file to folder: {mod_dest}")
+            if mod_dest.exists() or is_junction(mod_dest):
+                safe_remove_entry(mod_dest)
+            link_or_extract(mod_source, mod_dest, cache_dir=extract_cache_dir)
+            log.info(f"[SkinMonitor] Linked/extracted font mod to: {mod_dest}")
 
             # Store selected font mod in shared state for injection
             self.shared_state.selected_font_mod = {
@@ -1304,34 +1259,19 @@ class MessageHandler:
                 mod_folder_name = mod_source.stem
 
             # Extract/copy mod to injection mods directory immediately
-            import shutil
-            
             # Don't clean mods directory - we want to keep skin/map/font mods if they exist
             
+            extract_cache_dir = get_injection_dir() / ".extract_cache"
             if mod_source.is_dir():
                 mod_dest = injector.mods_dir / mod_source.name
-                if mod_dest.exists():
-                    shutil.rmtree(mod_dest, ignore_errors=True)
-                shutil.copytree(mod_source, mod_dest, dirs_exist_ok=True)
-                log.info(f"[SkinMonitor] Copied announcer mod directory to: {mod_dest}")
             elif mod_source.is_file() and mod_source.suffix.lower() in {".zip", ".fantome"}:
-                # Extract ZIP or FANTOME file
                 mod_dest = injector.mods_dir / mod_source.stem
-                if mod_dest.exists():
-                    shutil.rmtree(mod_dest, ignore_errors=True)
-                mod_dest.mkdir(parents=True, exist_ok=True)
-                # Security: Use safe extraction to prevent path traversal attacks
-                safe_extractall(mod_source, mod_dest)
-                file_type = "ZIP" if mod_source.suffix.lower() == ".zip" else "FANTOME"
-                log.info(f"[SkinMonitor] Extracted {file_type} announcer mod to: {mod_dest}")
             else:
-                # For other file types, create folder and copy file
                 mod_dest = injector.mods_dir / mod_folder_name
-                if mod_dest.exists():
-                    shutil.rmtree(mod_dest, ignore_errors=True)
-                mod_dest.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(mod_source, mod_dest / mod_source.name)
-                log.info(f"[SkinMonitor] Copied announcer mod file to folder: {mod_dest}")
+            if mod_dest.exists() or is_junction(mod_dest):
+                safe_remove_entry(mod_dest)
+            link_or_extract(mod_source, mod_dest, cache_dir=extract_cache_dir)
+            log.info(f"[SkinMonitor] Linked/extracted announcer mod to: {mod_dest}")
 
             # Store selected announcer mod in shared state for injection
             self.shared_state.selected_announcer_mod = {
@@ -1436,35 +1376,19 @@ class MessageHandler:
             else:
                 mod_folder_name = mod_source.stem
 
-            # Extract/copy mod to injection mods directory immediately
-            import shutil
-            
+            # Extract/copy mod to injection mods directory immediately via junction
             # Don't clean mods directory - we want to keep skin/map/font/announcer mods if they exist
-            
+            extract_cache_dir = get_injection_dir() / ".extract_cache"
             if mod_source.is_dir():
                 mod_dest = injector.mods_dir / mod_source.name
-                if mod_dest.exists():
-                    shutil.rmtree(mod_dest, ignore_errors=True)
-                shutil.copytree(mod_source, mod_dest, dirs_exist_ok=True)
-                log.info(f"[SkinMonitor] Copied other mod directory to: {mod_dest}")
             elif mod_source.is_file() and mod_source.suffix.lower() in {".zip", ".fantome"}:
-                # Extract ZIP or FANTOME file
                 mod_dest = injector.mods_dir / mod_source.stem
-                if mod_dest.exists():
-                    shutil.rmtree(mod_dest, ignore_errors=True)
-                mod_dest.mkdir(parents=True, exist_ok=True)
-                # Security: Use safe extraction to prevent path traversal attacks
-                safe_extractall(mod_source, mod_dest)
-                file_type = "ZIP" if mod_source.suffix.lower() == ".zip" else "FANTOME"
-                log.info(f"[SkinMonitor] Extracted {file_type} other mod to: {mod_dest}")
             else:
-                # For other file types, create folder and copy file
                 mod_dest = injector.mods_dir / mod_folder_name
-                if mod_dest.exists():
-                    shutil.rmtree(mod_dest, ignore_errors=True)
-                mod_dest.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(mod_source, mod_dest / mod_source.name)
-                log.info(f"[SkinMonitor] Copied other mod file to folder: {mod_dest}")
+            if mod_dest.exists() or is_junction(mod_dest):
+                safe_remove_entry(mod_dest)
+            link_or_extract(mod_source, mod_dest, cache_dir=extract_cache_dir)
+            log.info(f"[SkinMonitor] Linked/extracted other mod to: {mod_dest}")
 
             # Store selected other mod in shared state for injection (add to list)
             mod_info = {

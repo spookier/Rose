@@ -15,7 +15,8 @@ from lcu import LCU
 from state import SharedState
 from utils.core.issue_reporter import report_issue
 from utils.core.logging import get_logger, log_action
-from utils.core.safe_extract import safe_extractall
+from utils.core.junction import is_junction, safe_remove_entry, link_or_extract
+from utils.core.paths import get_injection_dir
 
 log = get_logger()
 
@@ -213,8 +214,7 @@ class InjectionTrigger:
                 try:
                     from utils.core.mod_historic import load_mod_historic
                     from injection.mods.storage import ModStorageService
-                    import shutil
-                    
+
                     mod_storage = ModStorageService()
                     historic_mods = load_mod_historic()
                     
@@ -301,29 +301,18 @@ class InjectionTrigger:
                                     else:
                                         mod_folder_name = mod_source.stem
                                     
-                                    # Extract/copy mod to injection mods directory
+                                    # Extract/copy mod to injection mods directory via junction
+                                    extract_cache_dir = get_injection_dir() / ".extract_cache"
                                     if mod_source.is_dir():
                                         mod_dest = injector.mods_dir / mod_source.name
-                                        if mod_dest.exists():
-                                            shutil.rmtree(mod_dest, ignore_errors=True)
-                                        shutil.copytree(mod_source, mod_dest, dirs_exist_ok=True)
-                                        log.info(f"[HISTORIC] Copied other mod directory to: {mod_dest}")
                                     elif mod_source.is_file() and mod_source.suffix.lower() in {".zip", ".fantome"}:
                                         mod_dest = injector.mods_dir / mod_source.stem
-                                        if mod_dest.exists():
-                                            shutil.rmtree(mod_dest, ignore_errors=True)
-                                        mod_dest.mkdir(parents=True, exist_ok=True)
-                                        # Security: Use safe extraction to prevent path traversal attacks
-                                        safe_extractall(mod_source, mod_dest)
-                                        file_type = "ZIP" if mod_source.suffix.lower() == ".zip" else "FANTOME"
-                                        log.info(f"[HISTORIC] Extracted {file_type} other mod to: {mod_dest}")
                                     else:
                                         mod_dest = injector.mods_dir / mod_folder_name
-                                        if mod_dest.exists():
-                                            shutil.rmtree(mod_dest, ignore_errors=True)
-                                        mod_dest.mkdir(parents=True, exist_ok=True)
-                                        shutil.copy2(mod_source, mod_dest / mod_source.name)
-                                        log.info(f"[HISTORIC] Copied other mod file to folder: {mod_dest}")
+                                    if mod_dest.exists() or is_junction(mod_dest):
+                                        safe_remove_entry(mod_dest)
+                                    link_or_extract(mod_source, mod_dest, cache_dir=extract_cache_dir)
+                                    log.info(f"[HISTORIC] Linked/extracted other mod to: {mod_dest}")
                                     
                                     # Add to valid mods list
                                     valid_other_mods.append({
@@ -408,29 +397,18 @@ class InjectionTrigger:
                             else:
                                 mod_folder_name = mod_source.stem
                             
-                            # Extract/copy mod to injection mods directory
+                            # Extract/copy mod to injection mods directory via junction
+                            extract_cache_dir = get_injection_dir() / ".extract_cache"
                             if mod_source.is_dir():
                                 mod_dest = injector.mods_dir / mod_source.name
-                                if mod_dest.exists():
-                                    shutil.rmtree(mod_dest, ignore_errors=True)
-                                shutil.copytree(mod_source, mod_dest, dirs_exist_ok=True)
-                                log.info(f"[HISTORIC] Copied {mod_type} mod directory to: {mod_dest}")
                             elif mod_source.is_file() and mod_source.suffix.lower() in {".zip", ".fantome"}:
                                 mod_dest = injector.mods_dir / mod_source.stem
-                                if mod_dest.exists():
-                                    shutil.rmtree(mod_dest, ignore_errors=True)
-                                mod_dest.mkdir(parents=True, exist_ok=True)
-                                # Security: Use safe extraction to prevent path traversal attacks
-                                safe_extractall(mod_source, mod_dest)
-                                file_type = "ZIP" if mod_source.suffix.lower() == ".zip" else "FANTOME"
-                                log.info(f"[HISTORIC] Extracted {file_type} {mod_type} mod to: {mod_dest}")
                             else:
                                 mod_dest = injector.mods_dir / mod_folder_name
-                                if mod_dest.exists():
-                                    shutil.rmtree(mod_dest, ignore_errors=True)
-                                mod_dest.mkdir(parents=True, exist_ok=True)
-                                shutil.copy2(mod_source, mod_dest / mod_source.name)
-                                log.info(f"[HISTORIC] Copied {mod_type} mod file to folder: {mod_dest}")
+                            if mod_dest.exists() or is_junction(mod_dest):
+                                safe_remove_entry(mod_dest)
+                            link_or_extract(mod_source, mod_dest, cache_dir=extract_cache_dir)
+                            log.info(f"[HISTORIC] Linked/extracted {mod_type} mod to: {mod_dest}")
                             
                             # Store selected mod in shared state
                             setattr(self.state, selected_attr, {
@@ -954,7 +932,15 @@ class InjectionTrigger:
             # Clean mods directory first (before extracting base skin and custom mod)
             injector._clean_mods_dir()
             injector._clean_overlay_dir()
-            
+
+            # Start game monitor early so it can suspend the game while mods are
+            # extracted/linked.  Large mods (e.g. 3 GB voiceover packs) may need
+            # several seconds on first extraction to cache, and the game can
+            # transition to InProgress in the meantime.
+            if self.injection_manager and not self.injection_manager._monitor_active:
+                log.info("[INJECT] Starting game monitor for custom mod injection (early start)")
+                self.injection_manager._start_monitor()
+
             # Collect all mods to inject (base skin + custom skin mod + map + font + announcer + other)
             mod_folder_names = []
             mod_names_list = []
@@ -995,29 +981,19 @@ class InjectionTrigger:
             if mod_folder_name and mod_path:
                 log.info(f"[INJECT] Re-extracting custom mod from: {mod_path}")
                 try:
-                    import shutil
                     mod_source = Path(mod_path)
                     if not mod_source.exists():
                         log.warning(f"[INJECT] Custom mod source not found: {mod_source}")
                     else:
+                        extract_cache_dir = get_injection_dir() / ".extract_cache"
                         mod_dest = injector.mods_dir / mod_folder_name
-                        if mod_dest.exists():
-                            shutil.rmtree(mod_dest, ignore_errors=True)
-                        mod_dest.mkdir(parents=True, exist_ok=True)
+                        if mod_dest.exists() or is_junction(mod_dest):
+                            safe_remove_entry(mod_dest)
+                        link_or_extract(mod_source, mod_dest, cache_dir=extract_cache_dir)
+                        log.info(f"[INJECT] Custom mod linked/extracted: {mod_folder_name}")
                         
-                        if mod_source.is_dir():
-                            shutil.copytree(mod_source, mod_dest, dirs_exist_ok=True)
-                            log.info(f"[INJECT] Custom mod directory copied: {mod_folder_name}")
-                        elif mod_source.is_file() and mod_source.suffix.lower() in {".zip", ".fantome"}:
-                            # Security: Use safe extraction to prevent path traversal attacks
-                            safe_extractall(mod_source, mod_dest)
-                            log.info(f"[INJECT] Custom mod ZIP extracted: {mod_folder_name}")
-                        else:
-                            shutil.copy2(mod_source, mod_dest / mod_source.name)
-                            log.info(f"[INJECT] Custom mod file copied: {mod_folder_name}")
-                        
-                        # Verify mod folder exists after extraction
-                        if mod_dest.exists():
+                        # Verify mod folder exists after extraction (junctions count too)
+                        if mod_dest.exists() or is_junction(mod_dest):
                             mod_folder_names.append(mod_folder_name)
                             mod_names_list.append(mod_name or "Custom Mod")
                             log.info(f"[INJECT] Custom skin mod ready: {mod_folder_name}")
@@ -1046,29 +1022,19 @@ class InjectionTrigger:
                     return None
                 
                 try:
-                    import shutil
                     mod_source = Path(mod_path)
                     if not mod_source.exists():
                         log.info(f"[INJECT] {mod_type_name} mod source not found (mod may have been deleted), ignoring: {mod_source}")
                         return None
-                    
+
+                    extract_cache_dir = get_injection_dir() / ".extract_cache"
                     mod_dest = injector.mods_dir / mod_folder_name
-                    if mod_dest.exists():
-                        shutil.rmtree(mod_dest, ignore_errors=True)
-                    mod_dest.mkdir(parents=True, exist_ok=True)
-                    
-                    if mod_source.is_dir():
-                        shutil.copytree(mod_source, mod_dest, dirs_exist_ok=True)
-                        log.info(f"[INJECT] {mod_type_name} mod directory copied: {mod_folder_name}")
-                    elif mod_source.is_file() and mod_source.suffix.lower() in {".zip", ".fantome"}:
-                        # Security: Use safe extraction to prevent path traversal attacks
-                        safe_extractall(mod_source, mod_dest)
-                        log.info(f"[INJECT] {mod_type_name} mod ZIP extracted: {mod_folder_name}")
-                    else:
-                        shutil.copy2(mod_source, mod_dest / mod_source.name)
-                        log.info(f"[INJECT] {mod_type_name} mod file copied: {mod_folder_name}")
-                    
-                    if mod_dest.exists():
+                    if mod_dest.exists() or is_junction(mod_dest):
+                        safe_remove_entry(mod_dest)
+                    link_or_extract(mod_source, mod_dest, cache_dir=extract_cache_dir)
+                    log.info(f"[INJECT] {mod_type_name} mod linked/extracted: {mod_folder_name}")
+
+                    if mod_dest.exists() or is_junction(mod_dest):
                         return mod_folder_name
                     else:
                         log.warning(f"[INJECT] {mod_type_name} mod folder not found after extraction: {mod_dest}")
@@ -1170,13 +1136,7 @@ class InjectionTrigger:
                 return
             
             log.info(f"[INJECT] Injecting mods: {', '.join(mod_names_list)}" + (f" for skin {skin_id}" if skin_id else ""))
-            
-            # Start game monitor to freeze game during overlay creation
-            # This prevents file locks and ensures clean injection
-            if self.injection_manager and not self.injection_manager._monitor_active:
-                log.info("[INJECT] Starting game monitor for custom mod injection")
-                self.injection_manager._start_monitor()
-            
+
             # Force base skin selection via LCU before injecting (only if injecting base skin ZIP)
             # For owned skins, user can select them normally - no need to force
             champion_id = self.state.locked_champ_id or self.state.hovered_champ_id

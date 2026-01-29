@@ -14,6 +14,7 @@ from typing import List, Optional
 from utils.core.logging import get_logger, log_action, log_success
 from utils.core.paths import get_skins_dir, get_injection_dir
 from utils.core.issue_reporter import report_issue
+from utils.core.junction import safe_remove_entry
 
 from ..config.config_manager import ConfigManager
 from ..game.game_detector import GameDetector
@@ -273,6 +274,9 @@ class SkinInjector:
         """Clean the injection system"""
         try:
             if self.mods_dir.exists():
+                # Remove entries individually so junctions are unlinked safely
+                for entry in self.mods_dir.iterdir():
+                    safe_remove_entry(entry)
                 shutil.rmtree(self.mods_dir, ignore_errors=True)
             overlay_dir = self.mods_dir.parent / "overlay"
             if overlay_dir.exists():

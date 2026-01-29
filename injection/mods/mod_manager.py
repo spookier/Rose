@@ -12,6 +12,7 @@ from typing import List
 from utils.core.logging import get_logger, log_success
 from utils.core.paths import get_user_data_dir
 from utils.core.safe_extract import safe_extractall
+from utils.core.junction import is_junction, safe_remove_entry
 
 log = get_logger()
 
@@ -29,13 +30,7 @@ class ModManager:
             self.mods_dir.mkdir(parents=True, exist_ok=True)
             return
         for p in self.mods_dir.iterdir():
-            if p.is_dir():
-                shutil.rmtree(p, ignore_errors=True)
-            else:
-                try:
-                    p.unlink()
-                except Exception:
-                    pass
+            safe_remove_entry(p)
     
     def clean_overlay_dir(self):
         """Clean the overlay directory to prevent file lock issues"""
