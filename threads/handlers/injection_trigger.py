@@ -76,13 +76,14 @@ class InjectionTrigger:
                 log.debug(f"[INJECT] Using selected chroma ID {selected_chroma_id} instead of base skin {ui_skin_id}")
         selected_custom_mod = getattr(self.state, 'selected_custom_mod', None)
         mod_name = None
-        if selected_custom_mod and selected_custom_mod.get("skin_id") == ui_skin_id:
+        if selected_custom_mod:
             mod_name = selected_custom_mod.get("mod_name") or selected_custom_mod.get("mod_folder_name")
         
         # Collect all selected mods for log message
         mod_labels = []
         if mod_name:
-            mod_labels.append(f"{mod_name} (SKIN_{ui_skin_id})")
+            mod_target_skin = selected_custom_mod.get("skin_id", ui_skin_id) if selected_custom_mod else ui_skin_id
+            mod_labels.append(f"{mod_name} (SKIN_{mod_target_skin})")
         else:
             mod_labels.append(name.upper())
         
@@ -445,14 +446,11 @@ class InjectionTrigger:
                 if selected_other_mod:
                     selected_other_mods = [selected_other_mod]
             
-            # Check if custom skin mod is selected
-            # In historic mode, use the historic skin ID; otherwise use hovered skin ID
-            target_skin_id = ui_skin_id
-            if getattr(self.state, 'historic_mode_active', False) and selected_custom_mod:
-                # Use the skin ID from the selected custom mod (which is the historic skin ID)
-                target_skin_id = selected_custom_mod.get("skin_id", ui_skin_id)
-            
-            has_custom_skin_mod = selected_custom_mod and selected_custom_mod.get("skin_id") == target_skin_id
+            # Check if custom skin mod is selected.
+            # The mod's own skin_id determines the base skin to inject,
+            # regardless of which skin is currently hovered in the UI.
+            has_custom_skin_mod = bool(selected_custom_mod)
+            target_skin_id = selected_custom_mod.get("skin_id", ui_skin_id) if selected_custom_mod else ui_skin_id
             has_other_mods = selected_map_mod or selected_font_mod or selected_announcer_mod or (selected_other_mods and len(selected_other_mods) > 0)
             has_any_mods = has_custom_skin_mod or has_other_mods
             

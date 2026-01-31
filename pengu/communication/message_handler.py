@@ -144,6 +144,10 @@ class MessageHandler:
             self._handle_add_custom_mods_skin_selected(payload)
         elif payload_type == "find-match-hover":
             self._handle_find_match_hover(payload)
+        elif payload_type == "dismiss-custom-mod":
+            self._handle_dismiss_custom_mod(payload)
+        elif payload_type == "dismiss-historic":
+            self._handle_dismiss_historic(payload)
         elif payload.get("skin"):
             # Handle skin detection message
             self._handle_skin_detection(payload)
@@ -649,7 +653,7 @@ class MessageHandler:
             log.error(f"[SkinMonitor] Failed to open mods folder: {e}")
     
     def _handle_request_skin_mods(self, payload: dict) -> None:
-        """Return the list of custom mods for a specific champion and skin"""
+        """Return the list of custom mods for a champion (all skins)"""
         if not self.mod_storage:
             return
 
@@ -657,17 +661,16 @@ class MessageHandler:
         if skin_id is None:
             return
 
+        champion_id = payload.get("championId")
+        if not champion_id:
+            from utils.core.utilities import get_champion_id_from_skin_id
+            champion_id = get_champion_id_from_skin_id(int(skin_id))
+
         try:
-            entries = self.mod_storage.list_mods_for_skin(skin_id)
+            entries = self.mod_storage.list_mods_for_champion(champion_id)
         except Exception as exc:
             log.error(f"[SkinMonitor] Failed to list skin mods: {exc}")
             entries = []
-
-        champion_id = payload.get("championId")
-        if entries:
-            first_entry_champion = entries[0].champion_id
-            if first_entry_champion is not None:
-                champion_id = first_entry_champion
 
         mods_payload = []
         for entry in entries:
@@ -679,6 +682,7 @@ class MessageHandler:
             mods_payload.append(
                 {
                     "modName": entry.mod_name,
+                    "skinId": entry.skin_id,
                     "description": entry.description,
                     "updatedAt": int(entry.updated_at * 1000),
                     "relativePath": str(relative_path).replace("\\", "/"),
@@ -916,18 +920,22 @@ class MessageHandler:
             return
 
         try:
-            # Find the mod in storage
-            entries = self.mod_storage.list_mods_for_skin(skin_id)
+            # Find the mod in storage (search all skins for this champion)
+            if not champion_id:
+                from utils.core.utilities import get_champion_id_from_skin_id
+                champion_id = get_champion_id_from_skin_id(int(skin_id))
+
+            entries = self.mod_storage.list_mods_for_champion(champion_id)
             selected_mod = None
             for entry in entries:
                 # Match by mod name or relative path
-                if (entry.mod_name == mod_id or 
+                if (entry.mod_name == mod_id or
                     str(entry.path.relative_to(self.mod_storage.mods_root)).replace("\\", "/") == mod_id):
                     selected_mod = entry
                     break
 
             if not selected_mod:
-                log.warning(f"[SkinMonitor] Mod not found: {mod_id} for skin {skin_id}")
+                log.warning(f"[SkinMonitor] Mod not found: {mod_id} for champion {champion_id}")
                 return
 
             # Extract mod immediately when selected (not during injection)
@@ -988,9 +996,10 @@ class MessageHandler:
             log.info(f"[SkinMonitor] Linked/extracted mod to: {mod_dest}")
 
             # Store selected mod in shared state for injection trigger
-            # Include the extracted folder name so injection knows what to use
+            # Use the mod entry's own skin_id (the skin the mod targets), not the
+            # payload's skinId (the skin currently hovered in the UI).
             self.shared_state.selected_custom_mod = {
-                "skin_id": skin_id,
+                "skin_id": selected_mod.skin_id,
                 "champion_id": champion_id,
                 "mod_name": selected_mod.mod_name,
                 "mod_path": str(selected_mod.path),
@@ -1011,7 +1020,7 @@ class MessageHandler:
                 except Exception as e:
                     log.debug(f"[SkinMonitor] Failed to broadcast historic state on custom mod selection: {e}")
             
-            log.info(f"[SkinMonitor] Custom mod selected and extracted: {selected_mod.mod_name} (skin {skin_id})")
+            log.info(f"[SkinMonitor] Custom mod selected and extracted: {selected_mod.mod_name} (target skin {selected_mod.skin_id})")
             log.info(f"[SkinMonitor] Mod ready for injection on threshold trigger")
 
             # Broadcast custom mod state to JavaScript to show mod name
@@ -1026,6 +1035,67 @@ class MessageHandler:
             import traceback
             log.debug(f"[SkinMonitor] Traceback: {traceback.format_exc()}")
     
+    def _handle_dismiss_custom_mod(self, payload: dict) -> None:
+        """Dismiss the active custom mod selection (close-button on popup)"""
+        if not getattr(self.shared_state, "selected_custom_mod", None):
+            return
+
+        # Clean up extracted mod folder
+        try:
+            mod_folder_name = self.shared_state.selected_custom_mod.get("mod_folder_name")
+            if mod_folder_name and self.injection_manager and getattr(self.injection_manager, "injector", None):
+                mods_dir = self.injection_manager.injector.mods_dir
+                extracted_path = mods_dir / str(mod_folder_name)
+                if extracted_path.exists() or is_junction(extracted_path):
+                    safe_remove_entry(extracted_path)
+                    log.info("[Dismiss] Removed extracted custom mod folder: %s", extracted_path)
+        except Exception as exc:
+            log.debug("[Dismiss] Failed to cleanup extracted custom mod: %s", exc)
+
+        # Clear historic entry so it doesn't auto-reselect
+        try:
+            from utils.core.historic import (
+                clear_historic_entry,
+                get_historic_skin_for_champion,
+                is_custom_mod_path,
+                get_custom_mod_path,
+            )
+            champ_id = self.shared_state.selected_custom_mod.get("champion_id")
+            rel_path = self.shared_state.selected_custom_mod.get("relative_path")
+            if champ_id and rel_path:
+                historic_value = get_historic_skin_for_champion(int(champ_id))
+                if historic_value is not None and is_custom_mod_path(historic_value):
+                    historic_path = get_custom_mod_path(historic_value)
+                    if historic_path and historic_path.replace("\\", "/") == str(rel_path).replace("\\", "/"):
+                        clear_historic_entry(int(champ_id))
+                        log.info("[Dismiss] Cleared historic entry for champion %s", champ_id)
+        except Exception as exc:
+            log.debug("[Dismiss] Failed to clear historic entry: %s", exc)
+
+        self.shared_state.selected_custom_mod = None
+        log.info("[Dismiss] Custom mod dismissed via popup close button")
+
+        # Broadcast cleared state
+        try:
+            if hasattr(self.shared_state, "ui_skin_thread") and self.shared_state.ui_skin_thread:
+                self.shared_state.ui_skin_thread._broadcast_custom_mod_state()
+        except Exception as exc:
+            log.debug("[Dismiss] Failed to broadcast custom mod state: %s", exc)
+
+    def _handle_dismiss_historic(self, payload: dict) -> None:
+        """Dismiss historic mode (close-button on popup)"""
+        self.shared_state.historic_mode_active = False
+        self.shared_state.historic_skin_id = None
+        self.shared_state.historic_first_detection_done = False
+        log.info("[Dismiss] Historic mode dismissed via popup close button")
+
+        # Broadcast cleared state
+        try:
+            if hasattr(self.shared_state, "ui_skin_thread") and self.shared_state.ui_skin_thread:
+                self.shared_state.ui_skin_thread._broadcast_historic_state()
+        except Exception as exc:
+            log.debug("[Dismiss] Failed to broadcast historic state: %s", exc)
+
     def _handle_select_map(self, payload: dict) -> None:
         """Handle map mod selection for injection"""
         if not self.mod_storage:

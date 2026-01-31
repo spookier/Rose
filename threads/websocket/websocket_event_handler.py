@@ -151,6 +151,10 @@ class WebSocketEventHandler:
         self.state.historic_mode_active = False
         self.state.historic_skin_id = None
         self.state.historic_first_detection_done = False
+
+        # Clear custom mod selection from previous game so the mod-name popup
+        # doesn't re-appear until the user (or historic auto-select) picks it.
+        self.state.selected_custom_mod = None
         
         # Reset exchange tracking
         if self.champion_lock_handler:

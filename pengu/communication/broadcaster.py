@@ -123,33 +123,12 @@ class Broadcaster:
         skin_name = None
         if historic_skin_id is not None:
             # Check if this is a custom mod path
-            from utils.core.historic import is_custom_mod_path, get_custom_mod_path
+            from utils.core.historic import is_custom_mod_path
             if is_custom_mod_path(historic_skin_id):
-                # Extract mod name from path (e.g., "gwen-battle-queen-edited-chroma_2.1.0" from "skins/887030/gwen-battle-queen-edited-chroma_2.1.0.fantome")
-                custom_mod_path = get_custom_mod_path(historic_skin_id)
-                try:
-                    path_parts = custom_mod_path.replace("\\", "/").split("/")
-                    if len(path_parts) >= 3 and path_parts[0] == "skins":
-                        # Get the mod filename (last part)
-                        mod_filename = path_parts[-1]
-                        # Remove file extension (.fantome, .zip, etc.)
-                        if "." in mod_filename:
-                            mod_name = mod_filename.rsplit(".", 1)[0]
-                        else:
-                            mod_name = mod_filename
-                        skin_name = mod_name
-                    else:
-                        # Fallback: use the last part of the path
-                        mod_filename = path_parts[-1] if path_parts else custom_mod_path
-                        if "." in mod_filename:
-                            mod_name = mod_filename.rsplit(".", 1)[0]
-                        else:
-                            mod_name = mod_filename
-                        skin_name = mod_name
-                except Exception as e:
-                    log.debug(f"[HISTORIC] Failed to extract mod name from path '{custom_mod_path}': {e}")
-                    # Fallback: use the path itself
-                    skin_name = custom_mod_path
+                # Custom mod popups are handled by the custom-mod-state broadcast
+                # (which goes through ROSE-CustomWheel's skin-matching logic).
+                # Don't show a popup here — it would bypass the skin check.
+                skin_name = None
             else:
                 # Check if this is a chroma ID
                 chroma_id_map = None
@@ -194,11 +173,13 @@ class Broadcaster:
         selected_custom_mod = getattr(self.shared_state, 'selected_custom_mod', None)
         active = selected_custom_mod is not None
         mod_name = selected_custom_mod.get("mod_name") if selected_custom_mod else None
+        skin_id = selected_custom_mod.get("skin_id") if selected_custom_mod else None
 
         payload = {
             "type": "custom-mod-state",
             "active": active,
             "modName": mod_name,
+            "skinId": skin_id,
             "timestamp": int(time.time() * 1000),
         }
 

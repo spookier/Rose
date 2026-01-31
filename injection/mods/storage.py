@@ -133,6 +133,33 @@ class ModStorageService:
 
         return entries
 
+    def list_mods_for_champion(self, champion_id: int | str) -> List[SkinModEntry]:
+        """Return every SkinModEntry whose champion matches *champion_id*.
+
+        Scans all numeric subdirectories under ``skins/`` and aggregates the
+        entries from each skin that belongs to the given champion.
+        """
+        champion_id_int = self._to_int(champion_id)
+        if champion_id_int is None:
+            return []
+
+        entries: List[SkinModEntry] = []
+        skins_dir = self.skins_dir
+        if not skins_dir.exists() or not skins_dir.is_dir():
+            return entries
+
+        for child in sorted(skins_dir.iterdir(), key=lambda p: p.name.lower()):
+            if not child.is_dir():
+                continue
+            child_int = self._to_int(child.name)
+            if child_int is None:
+                continue
+            if get_champion_id_from_skin_id(child_int) != champion_id_int:
+                continue
+            entries.extend(self.list_mods_for_skin(child_int))
+
+        return entries
+
     def has_mods_for_skin(self, skin_id: int | str) -> bool:
         return bool(self.list_mods_for_skin(skin_id))
 
