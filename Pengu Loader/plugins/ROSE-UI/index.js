@@ -6,9 +6,7 @@
  */
 (function enableLockedSkinPreview() {
   const LOG_PREFIX = "[Rose-UI][skin-preview]";
-  const STYLE_ID = "lpp-ui-unlock-skins-css";
-  const INLINE_ID = `${STYLE_ID}-inline`;
-  const STYLESHEET_NAME = "style.css";
+  const INLINE_ID = "lpp-ui-unlock-skins-css-inline";
   const BORDER_CLASS = "lpp-skin-border";
   const HIDDEN_CLASS = "lpp-skin-hidden";
   const CHROMA_CONTAINER_CLASS = "lpp-chroma-container";
@@ -31,6 +29,65 @@
     });
   }
 
+  let lastBaseSkinSkipRequest = 0;
+  const BASE_SKIN_SKIP_REQUEST_TIME_WINDOW_MS = 5000;
+
+  function handleSkipBaseSkin(payload) {
+    lastBaseSkinSkipRequest = Date.now();
+    log.info("received base skin skip request from rose");
+  }
+
+  // TODO Preferably move bridge communication logic and websocket interception to a separate Pengu plugin like ROSE-CORE,
+  // which provides a simple interface for adding custom observers for bridge and socket instead of duplicating this kind
+  // of code over all the plugins; this will do for now though
+  function interceptChampSelectWebsocket() {
+    window.rcp.postInit("rcp-fe-lol-champ-select", (api) => {
+      try {
+        const ws = api.champSelectBinding.socket._websocket;
+        const parentOnMessage = ws.onmessage;
+
+        ws.onmessage = function (event) {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload[1] == "OnJsonApiEvent") {
+              const eventData = payload[2];
+              if (eventData["uri"] == "/lol-champ-select/v1/skin-selector-info") {
+                // // **Bridge-less implementation** (don't use: bridge implementation is more reliable)
+                //
+                // const data = eventData["data"];
+                // 
+                // data is null in event type DELETE
+                // check if base skin
+                // if (data?.["selectedSkinId"] % 1000 == 0) {
+                //   log.info("skipping base skin");
+                //   // skip delegation
+                //   return;
+                // }
+
+                // Not a DELETE event
+                if (eventData["data"]?.["selectedSkinId"] != 0) {
+                  if (Date.now() - lastBaseSkinSkipRequest < BASE_SKIN_SKIP_REQUEST_TIME_WINDOW_MS) {
+                    log.info("skipping base skin");
+                    // skip delegation
+                    return;
+                  } else {
+                    log.info("not skipping base skin: no request received from rose (in time)");
+                  }
+                }
+              }
+            }
+
+            return parentOnMessage.call(this, event);
+          } catch(e) {
+            log.error("Error during WebSocket response parse: ", e);
+          }
+        };
+        log.info("Websocket Interception successful");
+      } catch (e) {
+        log.error("Failed WebSocket interception: ", e);
+      }
+    });
+  }
 
   const INLINE_RULES = `
     lol-uikit-navigation-item.menu_item_Golden\\ Rose {
@@ -128,8 +185,6 @@
       display: none !important;
     }
 
- 
-
     .skin-selection-carousel-container .skin-selection-carousel .skin-selection-item .skin-selection-thumbnail {
       height: 100% !important;
       margin: 0 !important;
@@ -212,32 +267,16 @@
       pointer-events: none !important;
     }
 
+    .skin-selection-carousel-container {
+      clip-path: inset(-3px -9999px -9999px -9999px) !important;
+    }
   `;
 
   const log = {
     info: (msg, extra) => console.info(`${LOG_PREFIX} ${msg}`, extra ?? ""),
     warn: (msg, extra) => console.warn(`${LOG_PREFIX} ${msg}`, extra ?? ""),
+    error: (msg, extra) => console.error(`${LOG_PREFIX} ${msg}`, extra ?? ""),
   };
-
-  function resolveStylesheetHref() {
-    try {
-      const script =
-        document.currentScript ||
-        document.querySelector('script[src$="index.js"]') ||
-        document.querySelector('script[src*="LPP-UI"]');
-
-      if (script?.src) {
-        return new URL(STYLESHEET_NAME, script.src).toString();
-      }
-    } catch (error) {
-      log.warn(
-        "failed to resolve stylesheet URL; falling back to relative path",
-        error
-      );
-    }
-
-    return STYLESHEET_NAME;
-  }
 
   function injectInlineRules() {
     if (document.getElementById(INLINE_ID)) {
@@ -248,37 +287,7 @@
     styleTag.id = INLINE_ID;
     styleTag.textContent = INLINE_RULES;
     document.head.appendChild(styleTag);
-    log.warn("applied inline fallback styling");
-  }
-
-  function removeInlineRules() {
-    const existing = document.getElementById(INLINE_ID);
-    if (existing) {
-      existing.remove();
-    }
-  }
-
-  function attachStylesheet() {
-    if (document.getElementById(STYLE_ID)) {
-      return;
-    }
-
-    const link = document.createElement("link");
-    link.id = STYLE_ID;
-    link.rel = "stylesheet";
-    link.href = resolveStylesheetHref();
-
-    link.addEventListener("load", () => {
-      removeInlineRules();
-      log.info("external stylesheet loaded");
-    });
-
-    link.addEventListener("error", () => {
-      link.remove();
-      injectInlineRules();
-    });
-
-    document.head.appendChild(link);
+    log.info("inline styles applied");
   }
 
   function ensureBorderFrame(skinItem) {
@@ -414,6 +423,8 @@
   }
 
   function scanSkinSelection() {
+    injectInlineRules();
+
     document.querySelectorAll(".skin-selection-item").forEach((skinItem) => {
       ensureChromaContainer(skinItem);
       ensureBorderFrame(skinItem);
@@ -478,8 +489,10 @@
     navItem.addEventListener(
       "click",
       (e) => {
-        e.stopPropagation();
-        e.preventDefault();
+        const lastActiveNavItem = document.querySelector(".main-nav-bar > * > lol-uikit-navigation-item[active]");
+        if (lastActiveNavItem) {
+          lastActiveNavItem.setAttribute("roseLastActive", true);
+        }
 
         // Dispatch event to open settings panel
         const event = new CustomEvent("rose-open-settings", {
@@ -489,12 +502,6 @@
         });
         window.dispatchEvent(event);
         log.info("Dispatched rose-open-settings event from Golden Rose button");
-
-        // Prevent the section from getting active class
-        const section = navItem.querySelector(".section");
-        if (section) {
-          section.classList.remove("active");
-        }
       },
       true
     ); // Use capture phase to intercept early
@@ -732,11 +739,16 @@
         return;
       }
     }
+    
     try {
       // Wait for bridge to be available (provides port)
-      await waitForBridge();
+      const bridge = await waitForBridge();
 
-      attachStylesheet();
+      // Subscribe to skip-base-skin messages from the shared bridge
+      bridge.subscribe("skip-base-skin", handleSkipBaseSkin);
+
+      interceptChampSelectWebsocket();
+      injectInlineRules();
       scanSkinSelection();
       setupSkinObserver();
       setupNavObserver();
