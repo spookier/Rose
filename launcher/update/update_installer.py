@@ -20,6 +20,11 @@ updater_log = get_named_logger("updater", prefix="log_updater")
 
 PERSISTENT_ROOT_FILES = ("icon.ico", "unins000.exe", "unins000.dat")
 
+# User-provided files that should survive updates (relative to install dir)
+PERSISTENT_USER_FILES = (
+    "injection/tools/cslol-dll.dll",  # User must provide their own DLL due to DMCA
+)
+
 # Standalone updater executable name
 UPDATER_EXE_NAME = "updater.exe"
 
@@ -112,6 +117,19 @@ class UpdateInstaller:
             except Exception as exc:  # noqa: BLE001
                 status_callback(f"Warning: failed to preserve {relative_name}: {exc}")
 
+        # Preserve user-provided files (e.g., DLL that users must provide themselves)
+        for relative_name in PERSISTENT_USER_FILES:
+            source_path = install_dir / relative_name
+            if not source_path.exists():
+                continue
+            target_path = extracted_root / relative_name
+            try:
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source_path, target_path)
+                updater_log.info(f"Preserved user file: {relative_name}")
+            except Exception as exc:  # noqa: BLE001
+                status_callback(f"Warning: failed to preserve {relative_name}: {exc}")
+
         # Create batch script for installation
         batch_path = updates_root / "apply_update.bat"
         zip_path_str = str(zip_path)
@@ -131,7 +149,7 @@ class UpdateInstaller:
                 batch.write('echo [%date% %time%] Update start > "%LOG%"\n')
                 batch.write("ping 127.0.0.1 -n 4 >nul\n")
                 batch.write('echo [%date% %time%] Mirroring files >> "%LOG%"\n')
-                batch.write('robocopy "%SOURCE%" "%DEST%" /MIR /NFL /NDL /NJH /NJS /XD __pycache__ "Pengu Loader\\plugins" /XF config.ini >> "%LOG%" 2>&1\n')
+                batch.write('robocopy "%SOURCE%" "%DEST%" /MIR /NFL /NDL /NJH /NJS /XD __pycache__ "Pengu Loader\\plugins" /XF config.ini cslol-dll.dll >> "%LOG%" 2>&1\n')
                 batch.write("if %ERRORLEVEL% GEQ 8 goto :robofail\n")
                 batch.write('echo [%date% %time%] Updating ROSE plugins (preserving user-installed) >> "%LOG%"\n')
                 batch.write('if exist "%SOURCE%\\Pengu Loader\\plugins" (\n')
@@ -218,6 +236,20 @@ class UpdateInstaller:
             except Exception as exc:  # noqa: BLE001
                 status_callback(f"Warning: failed to preserve {relative_name}: {exc}")
                 updater_log.warning(f"Failed to preserve {relative_name}: {exc}")
+
+        # Preserve user-provided files (e.g., DLL that users must provide themselves)
+        for relative_name in PERSISTENT_USER_FILES:
+            source_path = install_dir / relative_name
+            if not source_path.exists():
+                continue
+            target_path = extracted_root / relative_name
+            try:
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source_path, target_path)
+                updater_log.info(f"Preserved user file: {relative_name}")
+            except Exception as exc:  # noqa: BLE001
+                status_callback(f"Warning: failed to preserve {relative_name}: {exc}")
+                updater_log.warning(f"Failed to preserve user file {relative_name}: {exc}")
 
         # Return updater parameters
         return {

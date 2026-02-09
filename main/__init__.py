@@ -7,6 +7,7 @@ Main entry point for Rose
 import argparse
 import sys
 from typing import Optional
+from pathlib import Path
 
 # Python version check
 MIN_PYTHON = (3, 11)
@@ -15,6 +16,204 @@ if sys.version_info < MIN_PYTHON:
         f"Rose requires Python {MIN_PYTHON[0]}.{MIN_PYTHON[1]} or newer. "
         "Please upgrade your interpreter and rebuild the application."
     )
+
+
+def _get_tools_dir() -> Path:
+    """Get the tools directory path (works in both frozen and development environments)"""
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable (PyInstaller)
+        if hasattr(sys, '_MEIPASS'):
+            # One-file mode: tools are in _MEIPASS
+            base_path = Path(sys._MEIPASS)
+            return base_path / "injection" / "tools"
+        else:
+            # One-dir mode: tools are alongside executable
+            base_dir = Path(sys.executable).parent
+            possible_dirs = [
+                base_dir / "injection" / "tools",
+                base_dir / "_internal" / "injection" / "tools",
+            ]
+            for dir_path in possible_dirs:
+                if dir_path.exists():
+                    return dir_path
+            return possible_dirs[0]
+    else:
+        # Running as Python script
+        return Path(__file__).parent.parent / "injection" / "tools"
+
+
+def _check_dll_present() -> bool:
+    """
+    Check if cslol-dll.dll is present. If not, show a warning dialog and exit.
+    Returns True if DLL is present, False otherwise (after showing dialog).
+    """
+    if sys.platform != "win32":
+        return True  # Only relevant on Windows
+
+    tools_dir = _get_tools_dir()
+    dll_path = tools_dir / "cslol-dll.dll"
+
+    if dll_path.exists():
+        return True
+
+    # DLL is missing - show native Windows TaskDialog with clickable link
+    import ctypes
+    from ctypes import wintypes
+    import subprocess
+    import webbrowser
+
+    # Ensure tools directory exists for the user to place the DLL
+    tools_dir.mkdir(parents=True, exist_ok=True)
+
+    # Initialize common controls (required for TaskDialog)
+    class INITCOMMONCONTROLSEX(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", ctypes.c_uint),
+            ("dwICC", ctypes.c_uint),
+        ]
+
+    ICC_WIN95_CLASSES = 0x000000FF
+    icc = INITCOMMONCONTROLSEX()
+    icc.dwSize = ctypes.sizeof(INITCOMMONCONTROLSEX)
+    icc.dwICC = ICC_WIN95_CLASSES
+    ctypes.windll.comctl32.InitCommonControlsEx(ctypes.byref(icc))
+
+    # TaskDialog button IDs
+    IDCANCEL = 2
+    ID_OPEN_FOLDER = 1000
+
+    # TaskDialog flags
+    TDF_ENABLE_HYPERLINKS = 0x0001
+    TDF_ALLOW_DIALOG_CANCELLATION = 0x0008
+
+    # TaskDialog icons - use TD_WARNING_ICON properly
+    TD_WARNING_ICON = 0xFFFF  # -1 as unsigned
+
+    # Callback for hyperlink clicks
+    TDN_HYPERLINK_CLICKED = 3
+
+    # Store callback reference to prevent garbage collection
+    callback_ref = None
+
+    def make_callback():
+        @ctypes.WINFUNCTYPE(ctypes.c_long, wintypes.HWND, ctypes.c_uint, wintypes.WPARAM, wintypes.LPARAM, ctypes.c_long)
+        def task_dialog_callback(hwnd, msg, wparam, lparam, refdata):
+            if msg == TDN_HYPERLINK_CLICKED:
+                try:
+                    url = ctypes.wstring_at(lparam)
+                    webbrowser.open(url)
+                except Exception:
+                    pass
+            return 0
+        return task_dialog_callback
+
+    callback_ref = make_callback()
+
+    # TASKDIALOG_BUTTON structure
+    class TASKDIALOG_BUTTON(ctypes.Structure):
+        _fields_ = [
+            ("nButtonID", ctypes.c_int),
+            ("pszButtonText", wintypes.LPCWSTR),
+        ]
+
+    # TASKDIALOGCONFIG structure
+    class TASKDIALOGCONFIG(ctypes.Structure):
+        _fields_ = [
+            ("cbSize", ctypes.c_uint),
+            ("hwndParent", wintypes.HWND),
+            ("hInstance", wintypes.HINSTANCE),
+            ("dwFlags", ctypes.c_uint),
+            ("dwCommonButtons", ctypes.c_uint),
+            ("pszWindowTitle", wintypes.LPCWSTR),
+            ("pszMainIcon", wintypes.LPCWSTR),
+            ("pszMainInstruction", wintypes.LPCWSTR),
+            ("pszContent", wintypes.LPCWSTR),
+            ("cButtons", ctypes.c_uint),
+            ("pButtons", ctypes.POINTER(TASKDIALOG_BUTTON)),
+            ("nDefaultButton", ctypes.c_int),
+            ("cRadioButtons", ctypes.c_uint),
+            ("pRadioButtons", ctypes.c_void_p),
+            ("nDefaultRadioButton", ctypes.c_int),
+            ("pszVerificationText", wintypes.LPCWSTR),
+            ("pszExpandedInformation", wintypes.LPCWSTR),
+            ("pszExpandedControlText", wintypes.LPCWSTR),
+            ("pszCollapsedControlText", wintypes.LPCWSTR),
+            ("pszFooterIcon", wintypes.LPCWSTR),
+            ("pszFooter", wintypes.LPCWSTR),
+            ("pfCallback", ctypes.c_void_p),
+            ("lpCallbackData", ctypes.c_void_p),
+            ("cxWidth", ctypes.c_uint),
+        ]
+
+    # Create buttons array
+    buttons = (TASKDIALOG_BUTTON * 2)()
+    buttons[0].nButtonID = ID_OPEN_FOLDER
+    buttons[0].pszButtonText = "Open Folder"
+    buttons[1].nButtonID = IDCANCEL
+    buttons[1].pszButtonText = "Cancel"
+
+    content_text = (
+        "Due to a recent DMCA takedown, Rose can no longer distribute the cslol-dll.dll file.\n\n"
+        "To use Rose, you must provide your own signed cslol-dll.dll file.\n\n"
+        "For more information, join our Discord:\n"
+        "<a href=\"https://discord.gg/roseapp\">https://discord.gg/roseapp</a>\n\n"
+        "Without this file, Rose cannot function."
+    )
+
+    # Configure dialog
+    config = TASKDIALOGCONFIG()
+    config.cbSize = ctypes.sizeof(TASKDIALOGCONFIG)
+    config.hwndParent = None
+    config.hInstance = None
+    config.dwFlags = TDF_ENABLE_HYPERLINKS | TDF_ALLOW_DIALOG_CANCELLATION
+    config.dwCommonButtons = 0
+    config.pszWindowTitle = "Rose - DLL Required"
+    config.pszMainIcon = ctypes.cast(TD_WARNING_ICON, wintypes.LPCWSTR)
+    config.pszMainInstruction = "DLL file required"
+    config.pszContent = content_text
+    config.cButtons = 2
+    config.pButtons = ctypes.cast(buttons, ctypes.POINTER(TASKDIALOG_BUTTON))
+    config.nDefaultButton = ID_OPEN_FOLDER
+    config.pfCallback = ctypes.cast(callback_ref, ctypes.c_void_p)
+    config.lpCallbackData = 0
+    config.cxWidth = 0
+
+    # Show dialog
+    button_pressed = ctypes.c_int(0)
+    hr = ctypes.windll.comctl32.TaskDialogIndirect(
+        ctypes.byref(config),
+        ctypes.byref(button_pressed),
+        None,
+        None
+    )
+
+    # Check if TaskDialog failed
+    if hr != 0:
+        # Fallback to simple MessageBox
+        result = ctypes.windll.user32.MessageBoxW(
+            0,
+            "Due to a recent DMCA takedown, Rose can no longer distribute the cslol-dll.dll file.\n\n"
+            "To use Rose, you must provide your own signed cslol-dll.dll file.\n\n"
+            "For more information, join our Discord: https://discord.gg/roseapp\n\n"
+            "Click OK to open the folder where you should place the DLL.",
+            "Rose - DLL Required",
+            0x40031  # MB_OKCANCEL | MB_ICONWARNING | MB_SETFOREGROUND
+        )
+        if result == 1:  # IDOK
+            try:
+                subprocess.run(["explorer", str(tools_dir)], check=False)
+            except Exception:
+                pass
+        return False
+
+    # Handle button press
+    if button_pressed.value == ID_OPEN_FOLDER:
+        try:
+            subprocess.run(["explorer", str(tools_dir)], check=False)
+        except Exception:
+            pass
+
+    return False
 
 # Setup console first (before any imports that might use it)
 from .setup.console import setup_console, redirect_none_streams, start_console_buffer_manager
@@ -43,7 +242,6 @@ from utils.threading.thread_manager import create_daemon_thread
 from config import APP_VERSION, MAIN_LOOP_FORCE_QUIT_TIMEOUT_S, set_config_option
 from injection.config.config_manager import ConfigManager
 from injection.game.game_detector import GameDetector
-from pathlib import Path
 import time
 
 log = get_logger()
@@ -237,6 +435,10 @@ def run_league_unlock(args: Optional[argparse.Namespace] = None,
 
 def main() -> None:
     """Program entry point that prepares and launches Rose."""
+    # Check for required DLL before anything else
+    if not _check_dll_present():
+        sys.exit(1)
+
     args = setup_arguments()
     if sys.platform == "win32":
         if not args.dev:

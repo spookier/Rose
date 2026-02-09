@@ -32,10 +32,10 @@ else:
 import os
 
 # Binary files (executables and DLLs) - these go in binaries, not datas
+# NOTE: cslol-dll.dll is NOT included - users must provide their own due to DMCA
 injection_binaries = [
     'injection/tools/mod-tools.exe',
     'injection/tools/cslol-diag.exe',
-    'injection/tools/cslol-dll.dll',
     'injection/tools/wad-extract.exe',
     'injection/tools/wad-make.exe',
 ]

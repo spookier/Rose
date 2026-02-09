@@ -15,12 +15,7 @@
 
 Rose is an open-source automatic skin changer for League of Legends that enables seamless access to all skins in the game. The application runs silently in the system tray and automatically detects skin selections during champion select, injecting the chosen skin when the game loads.
 
-**Rose is built on two core technologies:**
-
-- **🎮 [Pengu Loader](https://github.com/FlorentTariolle/ROSE-Pengu)**: Plugin system that injects JavaScript plugins into the League Client, enabling enhanced UI interactions and quick skin detection
-- **🔧 [CSLOL](https://github.com/LeagueToolkit/cslol-manager)**: Safe skin injection framework that handles the actual skin injection process, fully compatible with Riot Vanguard
-
-These technologies work together to provide a seamless and effortless automatic skin-changing experience without any manual intervention.
+**Rose is built on [Pengu Loader](https://github.com/FlorentTariolle/ROSE-Pengu)**, a plugin system that injects JavaScript plugins into the League Client, enabling enhanced UI interactions and quick skin detection.
 
 ## Architecture
 
@@ -29,7 +24,7 @@ Rose consists of two main components:
 ### Python Backend
 
 - **LCU API Integration**: Communicates with the League Client via the League Client Update (LCU) API
-- **CSLOL Injection**: Uses CSLOL tools for safe skin injection
+- **Skin Injection**: Handles skin injection compatible with Riot Vanguard
 - **WebSocket Bridge**: Operates a WebSocket server for real-time communication with frontend plugins
 - **Skin Management**: Downloads and manages skins from the [LeagueSkins repository](https://github.com/Alban1911/LeagueSkins)
 - **Game Monitoring**: Tracks game state, champion select phases, and loadout countdowns
@@ -53,7 +48,7 @@ Rose includes a suite of JavaScript plugins that extend the League Client UI:
 1. **League Client Integration**: Rose activates **[Pengu Loader](https://github.com/FlorentTariolle/ROSE-Pengu)** on startup, which injects the JavaScript plugins into the League Client
 2. **Skin Detection**: When you hover over a skin in champion select, `ROSE-SkinMonitor` detects the selection and sends it to the Python backend
 3. **Game Opening Delay**: To make sure the injection has time to occur we suspend League of Legend's game process as long as the overlay is not ran
-4. **Game Injection**: Using CSLOL tools, Rose injects the selected skin when the game starts
+4. **Game Injection**: Rose injects the selected skin when the game starts
 5. **Seamless Experience**: The skin loads as if you owned it, with full chroma support and no gameplay impact (**Rose will never provide any competitive advantage to its users**)
 
 ## Features
@@ -65,7 +60,7 @@ Rose includes a suite of JavaScript plugins that extend the League Client UI:
 - **Historic Mode**: Access last used skin on every champion
 - **Custom Mod Insights**: ROSE-CustomWheel surfaces installed mods relevant to the skin you're hovering over, along with timestamps and quick folder access
 - **Smart Injection**: Never injects skins you already own
-- **Safe & Compatible**: Uses CSLOL injection tools compatible with Riot Vanguard
+- **Safe & Compatible**: Injection method compatible with Riot Vanguard
 - **Multi-Language Support**: Works with any client language
 - **Open Source**: Fully open source and extensible
 - **Free**: If you bought this software, you got scammed 💀
@@ -74,6 +69,13 @@ Rose includes a suite of JavaScript plugins that extend the League Client UI:
 
 - **Windows 10/11**
 - **League of Legends** installed
+- **Injection DLL** - You must provide your own signed DLL (see below)
+
+### DLL Requirement
+
+Due to DMCA restrictions, Rose cannot distribute the injection DLL file. You must obtain this file yourself from an authorized source and sign it with your own code signing certificate.
+
+On first launch, Rose will prompt you to provide this file and open the folder where it should be placed.
 
 ## Installation
 
@@ -130,10 +132,10 @@ Rose/
 │   └── runtime/           # Main runtime loop
 │       └── loop.py
 │
-├── injection/             # CSLOL injection system
+├── injection/             # Skin injection system
 │   ├── core/              # Core injection logic
 │   │   ├── manager.py    # Injection manager & coordination
-│   │   └── injector.py   # CSLOL skin injector
+│   │   └── injector.py   # Skin injector
 │   ├── game/              # Game detection and monitoring
 │   │   ├── game_detector.py
 │   │   └── game_monitor.py
@@ -146,7 +148,7 @@ Rose/
 │   ├── overlay/           # Overlay process management
 │   │   ├── overlay_manager.py
 │   │   └── process_manager.py
-│   └── tools/             # CSLOL tools (cslol-dll.dll, mod-tools.exe, etc.)
+│   └── tools/             # Injection tools (mod-tools.exe, etc.)
 │       └── tools_manager.py
 │
 ├── lcu/                   # League Client API integration
@@ -287,7 +289,6 @@ Rose/
 
 - **Python 3.11+**: Backend application
 - **[Pengu Loader](https://github.com/FlorentTariolle/ROSE-Pengu)**: Plugin system for League Client
-- **[CSLOL](https://github.com/LeagueToolkit/cslol-manager)**: Safe skin injection tools
 - **LCU API**: League Client communication
 - **WebSocket**: Real-time frontend-backend communication
 - **JavaScript/HTML/CSS**: Client UI plugins
