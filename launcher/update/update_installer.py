@@ -21,8 +21,9 @@ updater_log = get_named_logger("updater", prefix="log_updater")
 PERSISTENT_ROOT_FILES = ("icon.ico", "unins000.exe", "unins000.dat")
 
 # User-provided files that should survive updates (relative to install dir)
+# In frozen builds, files are under _internal/
 PERSISTENT_USER_FILES = (
-    "injection/tools/cslol-dll.dll",  # User must provide their own DLL due to DMCA
+    "_internal/injection/tools/cslol-dll.dll",  # User must provide their own DLL due to DMCA
 )
 
 # Standalone updater executable name
