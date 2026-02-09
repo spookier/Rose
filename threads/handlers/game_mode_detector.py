@@ -81,6 +81,10 @@ class GameModeDetector:
             self.state.current_queue_id = queue_id
 
             # Compute is_swiftplay_mode without intermediate False visible to other threads
+            # Explicit queue ID 480 check for Swiftplay (may have queue_id without gameMode)
+            if queue_id == 480:
+                new_swiftplay_mode = True
+
             if isinstance(game_mode, str) and game_mode.upper() in SWIFTPLAY_MODES:
                 new_swiftplay_mode = True
 

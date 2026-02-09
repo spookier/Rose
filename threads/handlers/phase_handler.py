@@ -52,6 +52,16 @@ class PhaseHandler:
                         self.swiftplay_handler._injection_triggered = True
         
         elif phase == "ChampSelect":
+            # Queue ID 480 fallback - handles race condition where game_mode_detector
+            # hasn't set is_swiftplay_mode yet when we enter ChampSelect
+            if not self.state.is_swiftplay_mode and self.state.current_queue_id == 480:
+                log.info("[phase] ChampSelect - queue ID 480 detected, setting Swiftplay mode")
+                self.state.is_swiftplay_mode = True
+                # Ensure handler state is initialized
+                if self.swiftplay_handler:
+                    self.swiftplay_handler._injection_triggered = False
+                    self.swiftplay_handler._last_matchmaking_state = None
+
             log.debug(f"[phase] ChampSelect detected - is_swiftplay_mode={self.state.is_swiftplay_mode}, extracted_mods={len(self.state.swiftplay_extracted_mods)}")
             if self.state.is_swiftplay_mode:
                 # Fallback: if Matchmaking phase was missed by the poller, extraction
@@ -138,13 +148,17 @@ class PhaseHandler:
                     self.swiftplay_handler.cleanup_swiftplay_exit()
 
         # Handle returning to Lobby from a Swiftplay game flow (dodge, decline, etc.)
-        # If we were in Matchmaking/ReadyCheck/ChampSelect and go back to Lobby,
-        # the Swiftplay session is over — clean up the orphaned state.
+        # Only cleanup if we're NOT returning to a Swiftplay lobby (queue ID 480).
+        # If queue ID is still 480, user wants to requeue with same skins — preserve tracking.
         _SWIFTPLAY_ACTIVE_PHASES = {"Matchmaking", "ReadyCheck", "ChampSelect", "FINALIZATION", "GameStart"}
         if phase == "Lobby" and previous_phase in _SWIFTPLAY_ACTIVE_PHASES:
             if self.state.is_swiftplay_mode and self.swiftplay_handler:
-                log.info(f"[phase] Returned to Lobby from {previous_phase} - cleaning up Swiftplay state (dodge/decline)")
-                self.swiftplay_handler.cleanup_swiftplay_exit()
+                # Check if we're still in a Swiftplay lobby (queue ID 480)
+                if self.state.current_queue_id == 480:
+                    log.info(f"[phase] Returned to Lobby from {previous_phase} - still in Swiftplay queue (480), preserving skin tracking")
+                else:
+                    log.info(f"[phase] Returned to Lobby from {previous_phase} - queue changed, cleaning up Swiftplay state")
+                    self.swiftplay_handler.cleanup_swiftplay_exit()
     
     def _handle_in_progress(self):
         """Handle InProgress phase"""

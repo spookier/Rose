@@ -75,6 +75,17 @@ class LobbyProcessor:
         is_swiftplay = False
         if detected_mode and isinstance(detected_mode, str) and detected_mode.upper() in SWIFTPLAY_MODES:
             is_swiftplay = True
+        # Queue ID 480 fallback - reliable Swiftplay indicator even when game_mode is missing
+        elif detected_queue == 480:
+            is_swiftplay = True
+            if not detected_mode:
+                detected_mode = "SWIFTPLAY"
+        # Also check stored queue ID as fallback (may still have 480 from before game ended)
+        elif detected_queue is None and self.state.current_queue_id == 480:
+            is_swiftplay = True
+            detected_queue = 480
+            if not detected_mode:
+                detected_mode = "SWIFTPLAY"
         elif detected_mode is None and self.lcu.ok and self.lcu.is_swiftplay:
             is_swiftplay = True
             fallback_mode = self.lcu.game_mode

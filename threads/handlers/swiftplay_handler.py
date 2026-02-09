@@ -83,24 +83,37 @@ class SwiftplayHandler:
                 try:
                     data = self.lcu.get(endpoint)
                     if data and isinstance(data, dict):
+                        # Check top-level gameMode
                         if "gameMode" in data and isinstance(data.get("gameMode"), str):
                             mode_value = data.get("gameMode")
                             if mode_value.upper() in SWIFTPLAY_MODES:
                                 game_mode = mode_value
 
+                        # Check top-level queueId
                         if "queueId" in data:
                             endpoint_queue = data.get("queueId")
                             if endpoint_queue is not None:
                                 queue_id = endpoint_queue
-                                queue_str = str(endpoint_queue).lower()
-                                if "swift" in queue_str:
-                                    game_mode = game_mode or "SWIFTPLAY"
-                                elif "brawl" in queue_str:
-                                    game_mode = game_mode or "BRAWL"
+
+                        # Check nested gameConfig (where queueId actually lives in /lol-lobby/v2/lobby)
+                        game_config = data.get("gameConfig", {})
+                        if isinstance(game_config, dict):
+                            if "gameMode" in game_config and isinstance(game_config.get("gameMode"), str):
+                                mode_value = game_config.get("gameMode")
+                                if mode_value.upper() in SWIFTPLAY_MODES:
+                                    game_mode = mode_value
+                            if "queueId" in game_config:
+                                config_queue = game_config.get("queueId")
+                                if config_queue is not None:
+                                    queue_id = config_queue
 
                 except Exception as e:
                     log.debug(f"[phase] Error checking {endpoint}: {e}")
                     continue
+
+            # Queue ID 480 fallback when game_mode is None/unknown
+            if queue_id == 480 and (not game_mode or game_mode.upper() not in SWIFTPLAY_MODES):
+                game_mode = "SWIFTPLAY"
 
             return game_mode, queue_id
 
