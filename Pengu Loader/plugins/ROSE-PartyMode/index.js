@@ -210,67 +210,78 @@
     }
 
     /* Party Panel */
+    /* ===== Panel: Riot dialog-frame style ===== */
     #${PANEL_ID} {
       position: fixed;
-      bottom: 180px;
-      right: 20px;
-      width: 340px;
-      background: linear-gradient(180deg, #1e2328 0%, #0a0c0e 100%);
-      border: 1px solid #463714;
-      border-radius: 4px;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 380px;
+      background-color: #010a13;
+      border: 2px solid #463714;
+      box-shadow: 0 0 0 1px rgba(1,10,19,.8), 0 8px 30px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.03);
       z-index: 9998;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
-      font-family: "Beaufort for LOL", Arial, sans-serif;
       display: none;
+      flex-direction: column;
+      cursor: default;
+      -webkit-font-smoothing: antialiased;
+      font-kerning: normal;
     }
 
     #${PANEL_ID}.visible {
-      display: block;
+      display: flex;
     }
 
+    /* Title bar — matches .lol-friend-finder-modal .title */
     .party-header {
-      padding: 12px 16px;
-      border-bottom: 1px solid #463714;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      padding: 15px 18px 10px;
     }
 
     .party-header h3 {
       margin: 0;
-      color: #c8aa6e;
-      font-size: 14px;
-      font-weight: normal;
-      letter-spacing: 1px;
+      color: #f0e6d2;
+      font-family: var(--font-display), "Beaufort for LOL", Arial, sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: .05em;
+      line-height: 22px;
       text-transform: uppercase;
     }
 
     .party-status {
-      font-size: 11px;
-      padding: 3px 8px;
-      border-radius: 3px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+      font-family: var(--font-body), Arial, sans-serif;
+      font-size: 12px;
+      font-weight: 400;
+      letter-spacing: .025em;
     }
 
-    .party-status.offline {
-      background: rgba(255, 70, 70, 0.2);
-      color: #ff4646;
-      border: 1px solid rgba(255, 70, 70, 0.3);
-    }
+    .party-status.offline { color: #5b5a56; }
+    .party-status.online  { color: #0acbe6; }
 
-    .party-status.online {
-      background: rgba(10, 203, 230, 0.2);
-      color: #0acbe6;
-      border: 1px solid rgba(10, 203, 230, 0.3);
-    }
-
+    /* Body — matches .lol-friend-finder-modal .modal-body */
     .party-content {
-      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      padding: 0 18px;
+      overflow: hidden;
     }
 
+    /* Description text */
+    .party-description {
+      color: #a09b8c;
+      font-family: var(--font-body), Arial, sans-serif;
+      font-size: 12px;
+      line-height: 16px;
+      margin-bottom: 15px;
+    }
+
+    /* Section headers — matches .lol-friend-finder-modal .header */
     .party-section {
-      margin-bottom: 16px;
+      margin-bottom: 15px;
     }
 
     .party-section:last-child {
@@ -279,53 +290,77 @@
 
     .party-section-title {
       color: #a09b8c;
-      font-size: 11px;
+      font-family: var(--font-display), "Beaufort for LOL", Arial, sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .05em;
       text-transform: uppercase;
-      letter-spacing: 1px;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
     }
 
-    /* Token display */
-    .token-container {
+    /* Inputs — matches lol-uikit-flat-input */
+    .token-container,
+    .add-peer-container {
       display: flex;
       gap: 8px;
+      align-items: stretch;
+    }
+
+    .token-input,
+    .add-peer-input {
+      flex: 1;
+      background: rgba(0,0,0,.7);
+      border: thin solid #3c3c41;
+      padding: 7px 10px;
+      color: #f0e6d2;
+      font-family: var(--font-body), Arial, sans-serif;
+      font-size: 12px;
+      line-height: 18px;
+      outline: none;
     }
 
     .token-input {
-      flex: 1;
-      background: rgba(0, 0, 0, 0.3);
-      border: 1px solid #3c3c41;
-      border-radius: 3px;
-      padding: 8px 10px;
-      color: #a09b8c;
       font-family: monospace;
       font-size: 11px;
+      color: #a09b8c;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
-    .token-input:focus {
-      outline: none;
+    .token-input:focus,
+    .add-peer-input:focus {
       border-color: #c89b3c;
     }
 
+    .add-peer-input::placeholder {
+      color: #5b5a56;
+    }
+
+    /* Buttons — matches lol-uikit-flat-button-secondary */
     .copy-btn, .add-btn {
-      background: linear-gradient(180deg, #1e2328 0%, #0a0c0e 100%);
-      border: 1px solid #463714;
-      border-radius: 3px;
-      padding: 8px 12px;
-      color: #c8aa6e;
+      background: transparent;
+      border: thin solid #5b5a56;
+      padding: 7px 16px;
+      color: #cdbe91;
       cursor: pointer;
-      font-size: 11px;
+      font-family: var(--font-body), Arial, sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .075em;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
-      transition: all 0.2s ease;
+      white-space: nowrap;
+      transition: color .3s, border-color .3s;
     }
 
     .copy-btn:hover, .add-btn:hover {
-      border-color: #c89b3c;
-      background: linear-gradient(180deg, #2a2f35 0%, #12161a 100%);
+      border-color: #c8aa6e;
+      color: #f0e6d2;
+    }
+
+    .copy-btn:active, .add-btn:active {
+      color: #463714;
+      border-color: #463714;
     }
 
     .copy-btn.copied {
@@ -333,33 +368,35 @@
       color: #0acbe6;
     }
 
-    /* Enable/Disable button */
+    /* Toggle button — matches lol-uikit-flat-button (primary) */
     .party-toggle-btn {
       width: 100%;
-      padding: 12px;
-      border-radius: 3px;
+      padding: 10px;
       cursor: pointer;
-      font-size: 13px;
-      font-weight: bold;
+      font-family: var(--font-body), Arial, sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: .1em;
       text-transform: uppercase;
-      letter-spacing: 1px;
-      transition: all 0.2s ease;
-      font-family: "Beaufort for LOL", Arial, sans-serif;
+      border: thin solid #c8aa6e;
+      transition: background .3s, color .3s, border-color .3s;
     }
 
     .party-toggle-btn.enable {
-      background: linear-gradient(180deg, #0acbe6 0%, #005a82 100%);
-      border: 1px solid #0acbe6;
-      color: #010a13;
+      background: linear-gradient(to bottom, #1e2328, #1e2328);
+      border-color: #c8aa6e;
+      color: #cdbe91;
     }
 
     .party-toggle-btn.enable:hover {
-      background: linear-gradient(180deg, #1ad5f0 0%, #007aa8 100%);
+      background: linear-gradient(to bottom, #1e2328, #1e2328);
+      border-color: #c8aa6e;
+      color: #f0e6d2;
     }
 
     .party-toggle-btn.disable {
-      background: linear-gradient(180deg, #3c3c41 0%, #1e2328 100%);
-      border: 1px solid #5b5a56;
+      background: transparent;
+      border-color: #5b5a56;
       color: #a09b8c;
     }
 
@@ -370,67 +407,64 @@
 
     .party-toggle-btn:disabled {
       opacity: 0.5;
-      cursor: not-allowed;
+      cursor: default;
     }
 
-    /* Peers list */
+    /* Peers list — matches requested-players / recent-summoners */
     .peers-list {
       max-height: 200px;
       overflow-y: auto;
       scrollbar-width: thin;
-      scrollbar-color: #463714 rgba(0, 0, 0, 0.25);
+      scrollbar-color: #463714 transparent;
     }
 
-    .peers-list::-webkit-scrollbar {
-      width: 6px;
-    }
-
-    .peers-list::-webkit-scrollbar-track {
-      background: rgba(0, 0, 0, 0.25);
-    }
-
-    .peers-list::-webkit-scrollbar-thumb {
-      background: #463714;
-      border-radius: 3px;
-    }
+    .peers-list::-webkit-scrollbar { width: 6px; }
+    .peers-list::-webkit-scrollbar-track { background: transparent; }
+    .peers-list::-webkit-scrollbar-thumb { background: #463714; border-radius: 3px; }
 
     .peer-item {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      padding: 10px 12px;
-      background: rgba(0, 0, 0, 0.2);
-      border-radius: 3px;
-      margin-bottom: 6px;
+      padding: 6px 0;
+      border-bottom: thin solid rgba(60,60,65,.5);
     }
 
     .peer-item:last-child {
-      margin-bottom: 0;
+      border-bottom: none;
     }
 
     .peer-info {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
+      flex: 1;
+      min-width: 0;
     }
 
     .peer-name {
+      color: #a09b8c;
+      font-family: var(--font-body), Arial, sans-serif;
+      font-size: 12px;
+      line-height: 16px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .peer-item:hover .peer-name {
       color: #f0e6d2;
-      font-size: 13px;
     }
 
     .peer-status {
+      font-family: var(--font-body), Arial, sans-serif;
       font-size: 10px;
       color: #5b5a56;
+      line-height: 14px;
     }
 
-    .peer-status.in-lobby {
-      color: #0acbe6;
-    }
+    .peer-status.in-lobby { color: #0acbe6; }
 
     .peer-skin {
       font-size: 10px;
       color: #c89b3c;
+      line-height: 14px;
     }
 
     .peer-remove {
@@ -438,45 +472,64 @@
       border: none;
       color: #5b5a56;
       cursor: pointer;
-      padding: 4px;
-      transition: color 0.2s ease;
+      padding: 4px 8px;
+      font-size: 14px;
+      transition: color .2s;
     }
 
-    .peer-remove:hover {
-      color: #ff4646;
-    }
+    .peer-remove:hover { color: #ff4646; }
 
     .no-peers {
       color: #5b5a56;
+      font-family: var(--font-body), Arial, sans-serif;
       font-size: 12px;
       text-align: center;
       padding: 20px;
     }
 
-    /* Add peer section */
-    .add-peer-container {
+    /* Close button — matches lol-uikit-dialog-frame close button */
+    .party-close-btn {
+      position: absolute;
+      top: -14px;
+      right: -14px;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #1e2328;
+      border: 2px solid #463714;
+      cursor: pointer;
       display: flex;
-      gap: 8px;
+      align-items: center;
+      justify-content: center;
+      transition: border-color .2s;
+      z-index: 1;
+      padding: 0;
     }
 
-    .add-peer-input {
-      flex: 1;
-      background: rgba(0, 0, 0, 0.3);
-      border: 1px solid #3c3c41;
-      border-radius: 3px;
-      padding: 8px 10px;
-      color: #f0e6d2;
-      font-family: monospace;
-      font-size: 11px;
+    .party-close-btn:hover {
+      border-color: #c8aa6e;
     }
 
-    .add-peer-input:focus {
-      outline: none;
-      border-color: #c89b3c;
+    .party-close-btn:active {
+      border-color: #785a28;
     }
 
-    .add-peer-input::placeholder {
-      color: #5b5a56;
+    .party-close-btn::before,
+    .party-close-btn::after {
+      content: "";
+      position: absolute;
+      width: 12px;
+      height: 2px;
+      background: #a09b8c;
+      transition: background .2s;
+    }
+
+    .party-close-btn::before { transform: rotate(45deg); }
+    .party-close-btn::after  { transform: rotate(-45deg); }
+
+    .party-close-btn:hover::before,
+    .party-close-btn:hover::after {
+      background: #f0e6d2;
     }
 
     /* Loading state */
@@ -492,31 +545,24 @@
       border: 2px solid rgba(200, 170, 110, 0.3);
       border-top-color: #c8aa6e;
       border-radius: 50%;
-      animation: spin 0.8s linear infinite;
+      animation: rose-party-spin 0.8s linear infinite;
     }
 
-    @keyframes spin {
+    @keyframes rose-party-spin {
       to { transform: rotate(360deg); }
     }
 
-    /* Error message */
+    /* Messages */
     .error-msg {
       color: #ff4646;
       font-size: 11px;
       margin-top: 8px;
-      padding: 8px;
-      background: rgba(255, 70, 70, 0.1);
-      border-radius: 3px;
     }
 
-    /* Success message */
     .success-msg {
       color: #0acbe6;
       font-size: 11px;
       margin-top: 8px;
-      padding: 8px;
-      background: rgba(10, 203, 230, 0.1);
-      border-radius: 3px;
     }
 
     /* Lobby action bar button - matches native social bar buttons */
@@ -564,15 +610,7 @@
       padding: 0 3px;
     }
 
-    /* Panel positioning for lobby mode */
-    #${PANEL_ID}.lobby-mode {
-      position: fixed;
-      bottom: auto;
-      right: auto;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-    }
+    /* Panel positioning for lobby mode (centered by default now) */
     `;
   }
 
@@ -692,6 +730,8 @@
         <span class="party-status offline">Offline</span>
       </div>
       <div class="party-content">
+        <div class="party-description">Share your skins with friends in the same lobby. Enable party mode and exchange tokens to connect.</div>
+
         <div class="party-section" id="party-toggle-section">
           <button class="party-toggle-btn enable" id="party-toggle-btn">
             Enable Party Mode
@@ -722,6 +762,7 @@
           </div>
         </div>
       </div>
+      <button class="party-close-btn" id="party-close-btn"></button>
     `;
 
     try {
@@ -733,6 +774,10 @@
       panel.querySelector("#add-peer-btn").addEventListener("click", handleAddPeer);
       panel.querySelector("#add-peer-input").addEventListener("keypress", (e) => {
         if (e.key === "Enter") handleAddPeer();
+      });
+      panel.querySelector("#party-close-btn").addEventListener("click", () => {
+        isVisible = false;
+        partyPanel.classList.remove("visible");
       });
     } catch (e) {
       console.error(`${LOG_PREFIX} Failed to create panel:`, e);
