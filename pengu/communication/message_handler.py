@@ -327,6 +327,7 @@ class MessageHandler:
                 except Exception:
                     path_valid = False
             
+            from config import APP_VERSION
             response_payload = {
                 "type": "settings-data",
                 "threshold": threshold,
@@ -336,6 +337,7 @@ class MessageHandler:
                 "gamePathValid": path_valid,
                 "hasErrors": len(diagnostics_errors) > 0,
                 "errorsCount": len(diagnostics_errors),
+                "version": APP_VERSION,
             }
             self._send_response(json.dumps(response_payload))
             

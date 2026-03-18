@@ -1539,7 +1539,7 @@
       "font-family: Beaufort for LOL, serif",
       "letter-spacing: 0.06em",
     ].join(";");
-    versionBadge.textContent = `v${currentSettings.version || "1.1.14"}`;
+    versionBadge.textContent = currentSettings.version ? `v${currentSettings.version}` : "";
     titleRow.appendChild(versionBadge);
 
     form.appendChild(titleRow);
