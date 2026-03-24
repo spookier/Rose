@@ -247,12 +247,14 @@ class OverlayManager:
                         proc.wait()
                     if self.process_manager:
                         self.process_manager.current_overlay_process = None
+                    self._wipe_overlay_dir(overlay_dir)
                     return 0  # Success - overlay ran through game
-                
+
                 time.sleep(PROCESS_MONITOR_SLEEP_S)
-            
+
             # Process completed normally (no stdout captured)
             self.current_overlay_process = None
+            self._wipe_overlay_dir(overlay_dir)
             if proc.returncode != 0:
                 log.error(f"[INJECT] runoverlay failed with return code: {proc.returncode}")
                 return proc.returncode
@@ -263,6 +265,17 @@ class OverlayManager:
             log.error(f"[INJECT] runoverlay error: {e}")
             return 1
     
+    @staticmethod
+    def _wipe_overlay_dir(overlay_dir: Path):
+        """Delete overlay WAD files after runoverlay finishes"""
+        try:
+            import shutil
+            shutil.rmtree(overlay_dir, ignore_errors=True)
+            overlay_dir.mkdir(parents=True, exist_ok=True)
+            log.debug("[INJECT] Wiped overlay directory after game ended")
+        except Exception as e:
+            log.debug(f"[INJECT] Could not wipe overlay directory: {e}")
+
     def _wipe_mods_dir(self):
         """Delete decrypted skin files immediately after mkoverlay consumes them"""
         try:
