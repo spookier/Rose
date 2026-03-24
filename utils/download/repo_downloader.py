@@ -42,7 +42,7 @@ class RepoDownloader:
     def __init__(
         self,
         target_dir: Path = None,
-        repo_url: str = "https://github.com/Alban1911/RoseSkins",
+        repo_url: str = "https://github.com/Alban1911/RoseSkin",
         progress_callback: Optional[ProgressCallback] = None,
     ):
         self.repo_url = repo_url
@@ -57,7 +57,7 @@ class RepoDownloader:
         
         # State tracking for incremental updates
         self.state_file = self.target_dir / '.repo_state.json'
-        self.api_base = "https://api.github.com/repos/Alban1911/RoseSkins"
+        self.api_base = "https://api.github.com/repos/Alban1911/RoseSkin"
         
         # State tracking for resources folder (resources)
         from utils.core.paths import get_user_data_dir
@@ -521,7 +521,7 @@ class RepoDownloader:
                 continue
             
             # Convert ZIP path to relative path
-            relative_path = file_info.filename.replace('RoseSkins-main/', '')
+            relative_path = file_info.filename.replace('RoseSkin-main/', '')
 
             # Remove 'skins/' or 'resources/' prefix to match local structure
             if relative_path.startswith('skins/'):
@@ -588,9 +588,9 @@ class RepoDownloader:
         extract_skins: bool = True,
         extract_resources: bool = True,
     ) -> bool:
-        """Extract skins, previews, and resources folder from the RoseSkins repository ZIP"""
+        """Extract skins, previews, and resources folder from the RoseSkin repository ZIP"""
         try:
-            log.info("Extracting skins, previews, and resources folder from RoseSkins repository ZIP...")
+            log.info("Extracting skins, previews, and resources folder from RoseSkin repository ZIP...")
 
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 # Find all files in the skins/ directory
@@ -601,8 +601,8 @@ class RepoDownloader:
                 if extract_skins:
                     for file_info in zip_ref.filelist:
                         # Look for files in skins/ directory, but skip the skins directory itself
-                        if (file_info.filename.startswith('RoseSkins-main/skins/') and 
-                            file_info.filename != 'RoseSkins-main/skins/' and
+                        if (file_info.filename.startswith('RoseSkin-main/skins/') and 
+                            file_info.filename != 'RoseSkin-main/skins/' and
                             not file_info.filename.endswith('/')):
                             skins_files.append(file_info)
                             
@@ -619,8 +619,8 @@ class RepoDownloader:
                 if extract_resources:
                     for file_info in zip_ref.filelist:
                         # Look for files in resources/ directory (entire folder)
-                        if (file_info.filename.startswith('RoseSkins-main/resources/') and 
-                            file_info.filename != 'RoseSkins-main/resources/' and
+                        if (file_info.filename.startswith('RoseSkin-main/resources/') and 
+                            file_info.filename != 'RoseSkin-main/resources/' and
                             not file_info.filename.endswith('/')):
                             resources_files.append(file_info)
                             resources_count += 1
@@ -679,7 +679,7 @@ class RepoDownloader:
                             continue
 
                         label = "Extracting skins..." if entry_type == "skin" else "Extracting skin ID mapping..."
-                        relative_path = file_info.filename.replace('RoseSkins-main/', '')
+                        relative_path = file_info.filename.replace('RoseSkin-main/', '')
                         is_zip = relative_path.endswith(('.zip', '.rse'))
                         is_png = relative_path.endswith('.png')
 
@@ -1137,13 +1137,13 @@ class RepoDownloader:
             log.info(f"Creating ZIP from {len(downloaded_files)} downloaded files...")
             self._emit_progress(progress_end - 5, "Creating ZIP archive...")
             
-            # Create ZIP file with structure: RoseSkins-main/resources/... (to match extract_skins_from_zip expectations)
+            # Create ZIP file with structure: RoseSkin-main/resources/... (to match extract_skins_from_zip expectations)
             with zipfile.ZipFile(temp_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 for file_path in resources_local_path.rglob('*'):
                     if file_path.is_file():
-                        # Add RoseSkins-main/ prefix to match extract_skins_from_zip expectations
+                        # Add RoseSkin-main/ prefix to match extract_skins_from_zip expectations
                         relative_path = file_path.relative_to(temp_dir_path)
-                        arcname = f"RoseSkins-main/{relative_path}"
+                        arcname = f"RoseSkin-main/{relative_path}"
                         zipf.write(file_path, arcname)
             
             # Clean up temp directory

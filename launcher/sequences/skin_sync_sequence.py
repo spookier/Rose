@@ -17,7 +17,7 @@ log = get_logger()
 updater_log = get_named_logger("updater", prefix="log_updater")
 
 # DownGit link for manual skin download
-DOWNGIT_URL = "https://minhaskamal.github.io/DownGit/#/home?url=https://github.com/Alban1911/RoseSkins"
+DOWNGIT_URL = "https://minhaskamal.github.io/DownGit/#/home?url=https://github.com/Alban1911/RoseSkin"
 
 MB_OK = 0x00000000
 MB_ICONWARNING = 0x00000030
