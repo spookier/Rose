@@ -115,6 +115,10 @@ relay_server.py
 # Relay config (contains Worker URL — keep secret)
 party/network/relay_config.py
 
+# Skin encryption (developer-only, contains Worker URL)
+tools/
+utils/crypto/skin_config.py
+
 # Relay worker (deployed separately to Cloudflare)
 relay-worker/node_modules/
 relay-worker/.wrangler/

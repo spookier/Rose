@@ -129,7 +129,6 @@ class OverlayManager:
                             stripped = line.strip()
                             if stripped:
                                 lines_list.append(stripped)
-                                log.debug(f"[INJECT] mkoverlay {prefix}: {stripped}")
                 except Exception as e:
                     log.debug(f"[INJECT] Error reading {prefix}: {e}")
             
@@ -167,7 +166,10 @@ class OverlayManager:
                     'mkoverlay_duration': mkoverlay_duration,
                     'timestamp': time.time()
                 }
-                
+
+                # Hide overlay files so they can't be easily browsed
+                self._hide_directory(overlay_dir)
+
                 # DON'T resume game yet - keep it frozen until runoverlay starts
                 log_event(log, "mkoverlay done - keeping game frozen until runoverlay starts", "❄️")
                 
@@ -199,7 +201,7 @@ class OverlayManager:
             f"--game:{gpath}", "--opts:configless"
         ]
         
-        log_action(log, f"Running overlay: {' '.join(cmd)}", "🚀")
+        log.debug(f"[INJECT] Running overlay")
         
         try:
             # Hide console window on Windows
@@ -258,6 +260,26 @@ class OverlayManager:
             log.error(f"[INJECT] runoverlay error: {e}")
             return 1
     
+    @staticmethod
+    def _hide_directory(path: Path):
+        """Set hidden + system attributes on a directory and its contents (Windows only)"""
+        import sys
+        if sys.platform != "win32":
+            return
+        try:
+            import ctypes
+            FILE_ATTRIBUTE_HIDDEN = 0x02
+            FILE_ATTRIBUTE_SYSTEM = 0x04
+            attrs = FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM
+            # Hide the directory itself
+            ctypes.windll.kernel32.SetFileAttributesW(str(path), attrs)
+            # Hide all contents recursively
+            for item in path.rglob('*'):
+                ctypes.windll.kernel32.SetFileAttributesW(str(item), attrs)
+            log.debug(f"[INJECT] Hidden overlay directory: {path}")
+        except Exception as e:
+            log.debug(f"[INJECT] Could not hide overlay directory: {e}")
+
     def mk_overlay_only(self, mod_names: List[str], timeout: int = 60) -> int:
         """Create overlay using mkoverlay only (no runoverlay) - for testing"""
         if self.game_dir is None:

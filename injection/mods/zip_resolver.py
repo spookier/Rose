@@ -12,6 +12,26 @@ from utils.core.logging import get_logger, log_success
 
 log = get_logger()
 
+SKIN_EXTENSIONS = ('.zip', '.fantome', '.rse')
+
+
+def _find_by_extensions(base: Path, stem: str) -> Optional[Path]:
+    """Try each skin extension for a given path stem, return first match."""
+    for ext in SKIN_EXTENSIONS:
+        candidate = base / f"{stem}{ext}"
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _rglob_by_extensions(base: Path, pattern_stem: str) -> Optional[Path]:
+    """Search recursively for a file with any skin extension, return first match."""
+    for ext in SKIN_EXTENSIONS:
+        matches = list(base.rglob(f"**/{pattern_stem}{ext}"))
+        if matches:
+            return matches[0]
+    return None
+
 
 class ZipResolver:
     """Resolves skin and chroma ZIP files from various naming conventions"""
@@ -46,17 +66,12 @@ class ZipResolver:
             if chroma_id is not None:
                 return self._resolve_chroma_by_id(champion_id, chroma_id)
             
-            # This is a base skin - Look for {champion_id}/{skin_id}/{skin_id}.zip or {skin_id}.fantome
+            # This is a base skin - Look for {champion_id}/{skin_id}/{skin_id}.zip/.fantome/.rse
             skin_dir = self.zips_dir / str(champion_id) / str(skin_id)
-            skin_zip_path = skin_dir / f"{skin_id}.zip"
-            skin_fantome_path = skin_dir / f"{skin_id}.fantome"
-            
-            if skin_zip_path.exists():
-                log.debug(f"[INJECT] Found skin ZIP: {skin_zip_path}")
-                return skin_zip_path
-            elif skin_fantome_path.exists():
-                log.debug(f"[INJECT] Found skin FANTOME: {skin_fantome_path}")
-                return skin_fantome_path
+            found = _find_by_extensions(skin_dir, str(skin_id))
+            if found:
+                log.debug(f"[INJECT] Found skin: {found}")
+                return found
             else:
                 # Not found as base skin - might be a chroma that was incorrectly labeled as skin_
                 # Try searching for it as a chroma in any base skin directory
@@ -136,14 +151,10 @@ class ZipResolver:
                 # Check if chroma directory exists
                 chroma_dir = skin_dir / str(chroma_id)
                 if chroma_dir.exists():
-                    chroma_zip = chroma_dir / f"{chroma_id}.zip"
-                    chroma_fantome = chroma_dir / f"{chroma_id}.fantome"
-                    if chroma_zip.exists():
-                        log_success(log, f"Found chroma: {chroma_zip.name}", "")
-                        return chroma_zip
-                    elif chroma_fantome.exists():
-                        log_success(log, f"Found chroma: {chroma_fantome.name}", "")
-                        return chroma_fantome
+                    found = _find_by_extensions(chroma_dir, str(chroma_id))
+                    if found:
+                        log_success(log, f"Found chroma: {found.name}", "")
+                        return found
             except ValueError:
                 # Not a skin directory, skip
                 continue
@@ -171,21 +182,13 @@ class ZipResolver:
         form_name = form_names.get(chroma_id, 'Unknown')
         log.info(f"[INJECT] Looking for Elementalist Lux {form_name} form")
         
-        # Look for the form file in the Lux directory (check both .zip and .fantome)
-        form_pattern_zip = f"Lux Elementalist {form_name}.zip"
-        form_pattern_fantome = f"Lux Elementalist {form_name}.fantome"
-        form_files_zip = list(self.zips_dir.rglob(f"**/{form_pattern_zip}"))
-        form_files_fantome = list(self.zips_dir.rglob(f"**/{form_pattern_fantome}"))
-        
-        if form_files_zip:
-            log_success(log, f"Found Elementalist Lux {form_name} form: {form_files_zip[0].name}", "✨")
-            return form_files_zip[0]
-        elif form_files_fantome:
-            log_success(log, f"Found Elementalist Lux {form_name} form: {form_files_fantome[0].name}", "✨")
-            return form_files_fantome[0]
-        else:
-            log.warning(f"[INJECT] Elementalist Lux {form_name} form file not found: {form_pattern_zip} or {form_pattern_fantome}")
-            return None
+        # Look for the form file in the Lux directory
+        found = _rglob_by_extensions(self.zips_dir, f"Lux Elementalist {form_name}")
+        if found:
+            log_success(log, f"Found Elementalist Lux {form_name} form: {found.name}", "✨")
+            return found
+        log.warning(f"[INJECT] Elementalist Lux {form_name} form file not found")
+        return None
     
     def _resolve_mordekaiser_form(self, chroma_id: int) -> Optional[Path]:
         """Resolve Sahn Uzal Mordekaiser form by chroma ID"""
@@ -200,21 +203,13 @@ class ZipResolver:
         form_name = form_names.get(chroma_id, 'Unknown')
         log.info(f"[INJECT] Looking for Sahn Uzal Mordekaiser {form_name} form")
         
-        # Look for the form file in the Mordekaiser directory (check both .zip and .fantome)
-        form_pattern_zip = f"Sahn Uzal Mordekaiser {form_name}.zip"
-        form_pattern_fantome = f"Sahn Uzal Mordekaiser {form_name}.fantome"
-        form_files_zip = list(self.zips_dir.rglob(f"**/{form_pattern_zip}"))
-        form_files_fantome = list(self.zips_dir.rglob(f"**/{form_pattern_fantome}"))
-        
-        if form_files_zip:
-            log_success(log, f"Found Sahn Uzal Mordekaiser {form_name} form: {form_files_zip[0].name}", "✨")
-            return form_files_zip[0]
-        elif form_files_fantome:
-            log_success(log, f"Found Sahn Uzal Mordekaiser {form_name} form: {form_files_fantome[0].name}", "✨")
-            return form_files_fantome[0]
-        else:
-            log.warning(f"[INJECT] Sahn Uzal Mordekaiser {form_name} form file not found: {form_pattern_zip} or {form_pattern_fantome}")
-            return None
+        # Look for the form file in the Mordekaiser directory
+        found = _rglob_by_extensions(self.zips_dir, f"Sahn Uzal Mordekaiser {form_name}")
+        if found:
+            log_success(log, f"Found Sahn Uzal Mordekaiser {form_name} form: {found.name}", "✨")
+            return found
+        log.warning(f"[INJECT] Sahn Uzal Mordekaiser {form_name} form file not found")
+        return None
     
     def _resolve_morgana_form(self, chroma_id: int) -> Optional[Path]:
         """Resolve Spirit Blossom Morgana form by chroma ID"""
@@ -224,21 +219,13 @@ class ZipResolver:
         form_name = 'Form 1' if chroma_id == 25999 else 'Unknown'
         log.info(f"[INJECT] Looking for Spirit Blossom Morgana {form_name} form")
         
-        # Look for the form file in the Morgana directory (check both .zip and .fantome)
-        form_pattern_zip = f"Spirit Blossom Morgana {form_name}.zip"
-        form_pattern_fantome = f"Spirit Blossom Morgana {form_name}.fantome"
-        form_files_zip = list(self.zips_dir.rglob(f"**/{form_pattern_zip}"))
-        form_files_fantome = list(self.zips_dir.rglob(f"**/{form_pattern_fantome}"))
-        
-        if form_files_zip:
-            log_success(log, f"Found Spirit Blossom Morgana {form_name} form: {form_files_zip[0].name}", "✨")
-            return form_files_zip[0]
-        elif form_files_fantome:
-            log_success(log, f"Found Spirit Blossom Morgana {form_name} form: {form_files_fantome[0].name}", "✨")
-            return form_files_fantome[0]
-        else:
-            log.warning(f"[INJECT] Spirit Blossom Morgana {form_name} form file not found: {form_pattern_zip} or {form_pattern_fantome}")
-            return None
+        # Look for the form file in the Morgana directory
+        found = _rglob_by_extensions(self.zips_dir, f"Spirit Blossom Morgana {form_name}")
+        if found:
+            log_success(log, f"Found Spirit Blossom Morgana {form_name} form: {found.name}", "✨")
+            return found
+        log.warning(f"[INJECT] Spirit Blossom Morgana {form_name} form file not found")
+        return None
     
     def _resolve_sett_form(self, chroma_id: int) -> Optional[Path]:
         """Resolve Radiant Sett form by chroma ID"""
@@ -253,21 +240,13 @@ class ZipResolver:
         form_name = form_names.get(chroma_id, 'Unknown')
         log.info(f"[INJECT] Looking for Radiant Sett {form_name} form")
         
-        # Look for the form file in the Sett directory (check both .zip and .fantome)
-        form_pattern_zip = f"Radiant Sett {form_name}.zip"
-        form_pattern_fantome = f"Radiant Sett {form_name}.fantome"
-        form_files_zip = list(self.zips_dir.rglob(f"**/{form_pattern_zip}"))
-        form_files_fantome = list(self.zips_dir.rglob(f"**/{form_pattern_fantome}"))
-        
-        if form_files_zip:
-            log_success(log, f"Found Radiant Sett {form_name} form: {form_files_zip[0].name}", "✨")
-            return form_files_zip[0]
-        elif form_files_fantome:
-            log_success(log, f"Found Radiant Sett {form_name} form: {form_files_fantome[0].name}", "✨")
-            return form_files_fantome[0]
-        else:
-            log.warning(f"[INJECT] Radiant Sett {form_name} form file not found: {form_pattern_zip} or {form_pattern_fantome}")
-            return None
+        # Look for the form file in the Sett directory
+        found = _rglob_by_extensions(self.zips_dir, f"Radiant Sett {form_name}")
+        if found:
+            log_success(log, f"Found Radiant Sett {form_name} form: {found.name}", "✨")
+            return found
+        log.warning(f"[INJECT] Radiant Sett {form_name} form file not found")
+        return None
     
     def _resolve_seraphine_form(self, chroma_id: int) -> Optional[Path]:
         """Resolve KDA Seraphine form by chroma ID"""
@@ -282,19 +261,11 @@ class ZipResolver:
         form_name = form_names.get(chroma_id, 'Unknown')
         log.info(f"[INJECT] Looking for KDA Seraphine {form_name} form")
         
-        # Look for the form file in the Seraphine directory (check both .zip and .fantome)
-        form_pattern_zip = f"KDA Seraphine {form_name}.zip"
-        form_pattern_fantome = f"KDA Seraphine {form_name}.fantome"
-        form_files_zip = list(self.zips_dir.rglob(f"**/{form_pattern_zip}"))
-        form_files_fantome = list(self.zips_dir.rglob(f"**/{form_pattern_fantome}"))
-        
-        if form_files_zip:
-            log_success(log, f"Found KDA Seraphine {form_name} form: {form_files_zip[0].name}", "✨")
-            return form_files_zip[0]
-        elif form_files_fantome:
-            log_success(log, f"Found KDA Seraphine {form_name} form: {form_files_fantome[0].name}", "✨")
-            return form_files_fantome[0]
-        else:
-            log.warning(f"[INJECT] KDA Seraphine {form_name} form file not found: {form_pattern_zip} or {form_pattern_fantome}")
-            return None
+        # Look for the form file in the Seraphine directory
+        found = _rglob_by_extensions(self.zips_dir, f"KDA Seraphine {form_name}")
+        if found:
+            log_success(log, f"Found KDA Seraphine {form_name} form: {found.name}", "✨")
+            return found
+        log.warning(f"[INJECT] KDA Seraphine {form_name} form file not found")
+        return None
 

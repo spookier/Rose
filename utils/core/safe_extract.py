@@ -5,6 +5,7 @@ Safe Archive Extraction Utilities
 Provides secure extraction of ZIP files with path traversal protection
 """
 
+import io
 import zipfile
 from pathlib import Path
 from typing import Union
@@ -77,6 +78,35 @@ def safe_extractall(zip_path: Union[str, Path], dest_dir: Union[str, Path]) -> N
         # All paths validated, safe to extract
         zf.extractall(dest_dir)
         log.debug(f"[EXTRACT] Safely extracted {len(zf.namelist())} files to {dest_dir}")
+
+
+def safe_extractall_from_bytes(data: bytes, dest_dir: Union[str, Path]) -> None:
+    """
+    Safely extract all contents of in-memory ZIP data to a destination directory.
+    Validates each file path to prevent path traversal attacks (zip slip).
+
+    Args:
+        data: Raw ZIP file contents as bytes
+        dest_dir: Destination directory for extraction
+
+    Raises:
+        UnsafePathError: If any file in the archive would be extracted outside dest_dir
+        zipfile.BadZipFile: If the data is not a valid ZIP
+    """
+    dest_dir = Path(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_resolved = dest_dir.resolve()
+
+    with zipfile.ZipFile(io.BytesIO(data), 'r') as zf:
+        for member in zf.namelist():
+            target_path = dest_resolved / member
+            if not is_safe_path(dest_resolved, target_path):
+                log.error(f"[SECURITY] Blocked unsafe path in archive: {member}")
+                raise UnsafePathError(
+                    f"Attempted path traversal detected: '{member}' would extract outside target directory"
+                )
+        zf.extractall(dest_dir)
+        log.debug(f"[EXTRACT] Safely extracted {len(zf.namelist())} files from memory to {dest_dir}")
 
 
 def safe_extract(zip_path: Union[str, Path], member: str, dest_dir: Union[str, Path]) -> Path:

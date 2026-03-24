@@ -607,7 +607,7 @@ class RepoDownloader:
                             skins_files.append(file_info)
                             
                             # Count file types for accurate reporting
-                            if file_info.filename.endswith('.zip'):
+                            if file_info.filename.endswith(('.zip', '.rse')):
                                 zip_count += 1
                             elif file_info.filename.endswith('.png'):
                                 png_count += 1
@@ -680,7 +680,7 @@ class RepoDownloader:
 
                         label = "Extracting skins..." if entry_type == "skin" else "Extracting skin ID mapping..."
                         relative_path = file_info.filename.replace('RoseSkins-main/', '')
-                        is_zip = relative_path.endswith('.zip')
+                        is_zip = relative_path.endswith(('.zip', '.rse'))
                         is_png = relative_path.endswith('.png')
 
                         if entry_type == "skin":
