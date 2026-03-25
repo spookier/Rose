@@ -125,6 +125,7 @@ utils/crypto/skin_config.py
 *.py.bak
 _cython_setup.py
 
-# Relay worker (deployed separately to Cloudflare)
+# Workers (deployed separately to Cloudflare)
 relay-worker/node_modules/
+skin-key-worker/node_modules/
 relay-worker/.wrangler/

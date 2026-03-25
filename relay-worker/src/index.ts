@@ -2,7 +2,6 @@ export { PartyRoom } from './room';
 
 interface Env {
   ROOM: DurableObjectNamespace;
-  SKIN_KEY: string;
 }
 
 export default {
@@ -13,16 +12,6 @@ export default {
     if (url.pathname === '/' && request.method === 'GET') {
       return new Response(JSON.stringify({ status: 'ok', service: 'rose-party-relay' }), {
         headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Skin decryption key
-    if (url.pathname === '/skin-key' && request.method === 'GET') {
-      if (!env.SKIN_KEY) {
-        return new Response('Key not configured', { status: 500 });
-      }
-      return new Response(env.SKIN_KEY, {
-        headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' },
       });
     }
 
