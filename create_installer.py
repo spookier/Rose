@@ -45,11 +45,13 @@ def create_installer():
     print("=" * 60)
     
     # Check if Inno Setup is installed
+    local_appdata = Path.home() / "AppData" / "Local" / "Programs"
     inno_setup_paths = [
+        str(local_appdata / "Inno Setup 6" / "ISCC.exe"),
         r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
         r"C:\Program Files\Inno Setup 6\ISCC.exe",
         r"C:\Program Files (x86)\Inno Setup 5\ISCC.exe",
-        r"C:\Program Files\Inno Setup 5\ISCC.exe"
+        r"C:\Program Files\Inno Setup 5\ISCC.exe",
     ]
     
     iscc_path = None

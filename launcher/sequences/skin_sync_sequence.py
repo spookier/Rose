@@ -101,43 +101,9 @@ class SkinSyncSequence:
             time.sleep(0.4)
             updater_log.info("Skin library synchronized successfully.")
         else:
-            dialog.set_status("Skin download failed. See popup for manual download.")
+            dialog.set_status("Skin download failed. Continuing…")
             dialog.set_progress(0)
             dialog.clear_transfer_text()
             dialog.pump_messages()
-            updater_log.warning("Skin download failed; showing manual download instructions.")
-
-            # Show message box with manual download instructions and open link in browser
-            from utils.core.paths import get_skins_dir, get_user_data_dir
-            import webbrowser
-            skins_dir = get_skins_dir()
-            resources_dir = get_user_data_dir() / "resources"
-
-            message = (
-                "Skin download failed.\n\n"
-                "A download link will open in your browser.\n\n"
-                "After downloading and extracting:\n\n"
-                f"1. Copy 'skins' folder to:\n   {skins_dir.parent}\n\n"
-                f"2. Copy 'resources' folder to:\n   {resources_dir.parent}\n\n"
-                "Rose will detect the skins on next launch."
-            )
-
-            try:
-                user32.MessageBoxW(
-                    None,
-                    message,
-                    "Rose - Skin Download Failed",
-                    MB_OK | MB_ICONWARNING | MB_TOPMOST,
-                )
-                # Open download link in browser
-                webbrowser.open(DOWNGIT_URL)
-            except Exception as e:
-                updater_log.error(f"Failed to show manual download dialog: {e}")
-
-            updater_log.info(f"Manual download URL provided to user: {DOWNGIT_URL}")
-
-            # Exit app so user can manually download skins
-            updater_log.info("Exiting app after skin download failure.")
-            import os
-            os._exit(0)
+            updater_log.warning("Skin download failed; continuing startup.")
 

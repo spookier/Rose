@@ -7,11 +7,9 @@ Much more efficient than individual API calls
 Supports incremental updates by tracking repository changes
 """
 
-import json
 import time
 import zipfile
 import tempfile
-import shutil
 import requests
 from pathlib import Path
 from typing import Callable, Optional, Dict, List, Tuple
@@ -51,17 +49,12 @@ class RepoDownloader:
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': APP_USER_AGENT,
-            'Accept': 'application/vnd.github.v3+json'
         })
         self.progress_callback = progress_callback
-        
-        # State tracking for incremental updates
-        self.state_file = self.target_dir / '.repo_state.json'
-        self.api_base = "https://api.github.com/repos/Alban1911/RoseSkin"
-        
-        # State tracking for resources folder (resources)
-        from utils.core.paths import get_user_data_dir
-        self.resources_state_file = get_user_data_dir() / "resources" / ".resources_state.json"
+
+        # Version tracking — uses raw.githubusercontent.com (CDN, no rate limits)
+        self.version_url = "https://raw.githubusercontent.com/Alban1911/RoseSkin/main/version.txt"
+        self.version_file = self.target_dir / '.skin_version'
     
     def _emit_progress(self, percent: float, message: Optional[str] = None):
         if not self.progress_callback:
@@ -69,312 +62,57 @@ class RepoDownloader:
         bounded = max(0.0, min(percent, 100.0))
         self.progress_callback(int(bounded), message)
     
-    def get_repo_state(self) -> Dict:
-        """Get current repository state from GitHub API (skins folder only)
-        Returns Dict with 'rate_limited' key set to True if rate limited"""
+    def fetch_remote_version(self) -> Optional[str]:
+        """Fetch the current version from RoseSkin repo (CDN, no API rate limits)"""
         try:
-            # Get the latest commit that touched the skins directory
-            response = self.session.get(
-                f"{self.api_base}/commits",
-                params={'sha': 'main', 'path': 'skins', 'per_page': 1}
-            )
+            # Cache-busting parameter to bypass GitHub CDN cache (~5 min TTL)
+            url = f"{self.version_url}?t={int(time.time())}"
+            response = self.session.get(url, timeout=10, headers={'Cache-Control': 'no-cache'})
             response.raise_for_status()
-            commits = response.json()
-            
-            if commits and len(commits) > 0:
-                commit_data = commits[0]
-                return {
-                    'last_commit_sha': commit_data['sha'],
-                    'last_commit_date': commit_data['commit']['committer']['date'],
-                    'last_checked': None  # Will be set when we save state
-                }
-            
-            log.warning("No commits found for skins folder")
-            return {}
-        except requests.HTTPError as e:
-            if e.response and e.response.status_code in (403, 429):
-                log.warning(f"GitHub API rate limit exceeded: {e}")
-                log.info("Will skip incremental check and use ZIP download to avoid rate limits")
-                return {'rate_limited': True}
-            else:
-                log.error(f"Failed to get repository state: {e}")
-                return {}
+            version = response.text.strip()
+            log.info(f"Remote skin version: {version}")
+            return version
         except requests.RequestException as e:
-            log.error(f"Failed to get repository state: {e}")
-            return {}
-    
-    def get_remaining_api_calls(self, response: requests.Response) -> int:
-        """Get remaining API calls from GitHub response headers"""
-        try:
-            remaining = int(response.headers.get('X-RateLimit-Remaining', '0'))
-            limit = int(response.headers.get('X-RateLimit-Limit', '60'))
-            log.debug(f"GitHub API rate limit: {remaining}/{limit} remaining")
-            return remaining
-        except (ValueError, AttributeError):
-            return 0
-    
-    def load_local_state(self) -> Dict:
-        """Load local state from state file"""
-        if not self.state_file.exists():
-            return {}
-        
-        try:
-            with open(self.state_file, 'r') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError) as e:
-            log.warning(f"Failed to load local state: {e}")
-            return {}
-    
-    def save_local_state(self, state: Dict):
-        """Save local state to state file"""
-        try:
-            self.state_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.state_file, 'w') as f:
-                json.dump(state, f, indent=2)
-        except IOError as e:
-            log.warning(f"Failed to save local state: {e}")
-    
-    def get_resources_state(self) -> Dict:
-        """Get current resources folder state from GitHub API
-        Returns Dict with 'rate_limited' key set to True if rate limited"""
-        try:
-            # Get the latest commit that touched the resources directory
-            response = self.session.get(
-                f"{self.api_base}/commits",
-                params={'sha': 'main', 'path': 'resources', 'per_page': 1}
-            )
-            response.raise_for_status()
-            commits = response.json()
-            
-            if commits and len(commits) > 0:
-                commit_data = commits[0]
-                return {
-                    'last_commit_sha': commit_data['sha'],
-                    'last_commit_date': commit_data['commit']['committer']['date'],
-                    'last_checked': None  # Will be set when we save state
-                }
-            
-            log.warning("No commits found for resources folder")
-            return {}
-        except requests.HTTPError as e:
-            if e.response and e.response.status_code in (403, 429):
-                log.warning(f"GitHub API rate limit exceeded for resources check: {e}")
-                return {'rate_limited': True}
-            else:
-                log.error(f"Failed to get resources state: {e}")
-                return {}
-        except requests.RequestException as e:
-            log.error(f"Failed to get resources state: {e}")
-            return {}
-    
-    def load_resources_state(self) -> Dict:
-        """Load local resources state from state file"""
-        if not self.resources_state_file.exists():
-            return {}
-        
-        try:
-            with open(self.resources_state_file, 'r') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError) as e:
-            log.warning(f"Failed to load resources state: {e}")
-            return {}
-    
-    def save_resources_state(self, state: Dict):
-        """Save local resources state to state file"""
-        try:
-            self.resources_state_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.resources_state_file, 'w') as f:
-                json.dump(state, f, indent=2)
-        except IOError as e:
-            log.warning(f"Failed to save resources state: {e}")
-    
-    def has_resources_changed(self) -> bool:
-        """Check if resources folder has changed since last update"""
-        local_state = self.load_resources_state()
-        if not local_state:
-            # No state file - check if resources already exist (manual download)
-            # Require at least 5 json files to consider it a valid manual download
-            MIN_RESOURCES_FOR_MANUAL_DOWNLOAD = 5
-            from utils.core.paths import get_user_data_dir
-            resources_dir = get_user_data_dir() / "resources"
-            existing_resources = list(resources_dir.rglob("*.json")) if resources_dir.exists() else []
-            if len(existing_resources) >= MIN_RESOURCES_FOR_MANUAL_DOWNLOAD:
-                # Resources exist but no state file - create state from current commit
-                log.info(f"No resources state but found {len(existing_resources)} existing files (likely manual download)")
-                current_state = self.get_resources_state()
-                if current_state and not current_state.get('rate_limited'):
-                    current_state['last_checked'] = current_state.get('last_commit_date')
-                    self.save_resources_state(current_state)
-                    log.info("Created resources state file from current GitHub commit")
-                    return False  # No update needed
-            elif existing_resources:
-                log.info(f"Found only {len(existing_resources)} resource files (need {MIN_RESOURCES_FOR_MANUAL_DOWNLOAD}+), will download full set")
-            log.info("No local resources state found, resources will be downloaded")
-            return True
+            log.warning(f"Failed to fetch remote version: {e}")
+            return None
 
-        current_state = self.get_resources_state()
-        if not current_state:
-            log.warning("Failed to get current resources state, assuming no changes")
-            return False
+    def get_local_version(self) -> Optional[str]:
+        """Read the locally stored skin version"""
+        if not self.version_file.exists():
+            return None
+        try:
+            return self.version_file.read_text(encoding='utf-8').strip()
+        except (IOError, OSError) as e:
+            log.warning(f"Failed to read local version: {e}")
+            return None
 
-        # Check if rate limited - if so, force update via ZIP
-        if current_state.get('rate_limited'):
-            log.info("Rate limited detected for resources, will force ZIP download")
-            return True
+    def save_local_version(self, version: str):
+        """Save the skin version string locally"""
+        try:
+            self.version_file.parent.mkdir(parents=True, exist_ok=True)
+            self.version_file.write_text(version, encoding='utf-8')
+        except (IOError, OSError) as e:
+            log.warning(f"Failed to save local version: {e}")
 
-        # Compare commit SHAs
-        local_sha = local_state.get('last_commit_sha')
-        current_sha = current_state.get('last_commit_sha')
-
-        if local_sha != current_sha:
-            log.info(f"Resources folder changed: {local_sha[:8] if local_sha else 'None'} -> {current_sha[:8] if current_sha else 'None'}")
-            return True
-
-        log.info("Resources folder unchanged, skipping download")
-        return False
-    
     def has_repository_changed(self) -> bool:
-        """Check if repository has changed since last update"""
-        local_state = self.load_local_state()
-        if not local_state:
-            # No state file - check if skins already exist (manual download)
-            # Count champion folders (top-level directories in skins folder)
-            # League has 172+ champions, require at least 150 to consider valid
-            MIN_CHAMPIONS_FOR_MANUAL_DOWNLOAD = 150
-            champion_folders = []
-            if self.target_dir.exists():
-                champion_folders = [d for d in self.target_dir.iterdir() if d.is_dir()]
-            if len(champion_folders) >= MIN_CHAMPIONS_FOR_MANUAL_DOWNLOAD:
-                # Enough champion folders exist - create state from current commit
-                log.info(f"No state file but found {len(champion_folders)} champion folders (likely manual download)")
-                current_state = self.get_repo_state()
-                if current_state and not current_state.get('rate_limited'):
-                    current_state['last_checked'] = current_state.get('last_commit_date')
-                    self.save_local_state(current_state)
-                    log.info("Created state file from current GitHub commit")
-                    return False  # No update needed
-            elif champion_folders:
-                log.info(f"Found only {len(champion_folders)} champion folders (need {MIN_CHAMPIONS_FOR_MANUAL_DOWNLOAD}+), will download full set")
-            log.info("No local state found, repository will be downloaded")
-            return True
-
-        current_state = self.get_repo_state()
-        if not current_state:
-            log.warning("Failed to get current repository state, assuming no changes")
+        """Check if repository has changed by comparing version.txt"""
+        remote_version = self.fetch_remote_version()
+        if remote_version is None:
+            log.warning("Could not fetch remote version, assuming no changes")
             return False
 
-        # Check if rate limited - if so, force update via ZIP
-        if current_state.get('rate_limited'):
-            log.info("Rate limited detected, will force ZIP download")
+        local_version = self.get_local_version()
+        if local_version is None:
+            log.info("No local version found, repository needs download")
             return True
 
-        # Compare commit SHAs
-        local_sha = local_state.get('last_commit_sha')
-        current_sha = current_state.get('last_commit_sha')
-
-        if local_sha != current_sha:
-            log.info(f"Repository changed: {local_sha[:8] if local_sha else 'None'} -> {current_sha[:8] if current_sha else 'None'}")
+        if local_version != remote_version:
+            log.info(f"Repository version changed: {local_version} -> {remote_version}")
             return True
 
-        log.info("Repository unchanged, skipping download")
+        log.info("Repository version unchanged, skipping download")
         return False
     
-    def get_changed_files(self, since_commit: str) -> Tuple[List[Dict], Optional[requests.Response]]:
-        """Get list of files that changed since a specific commit
-        Returns: (changed_files_list, response_object or rate_limited marker)"""
-        try:
-            # Get commits since the specified commit
-            response = self.session.get(f"{self.api_base}/compare/{since_commit}...main")
-            response.raise_for_status()
-            compare_data = response.json()
-            
-            changed_files = []
-            for file_info in compare_data.get('files', []):
-                # Only include files in the skins/ directory
-                if file_info['filename'].startswith('skins/'):
-                    # Get download URL using the file's SHA
-                    download_url = None
-                    if file_info.get('sha'):
-                        download_url = f"{self.api_base}/contents/{file_info['filename']}?ref=main"
-                    
-                    changed_files.append({
-                        'filename': file_info['filename'],
-                        'status': file_info['status'],  # 'added', 'modified', 'removed'
-                        'sha': file_info.get('sha'),
-                        'download_url': download_url
-                    })
-            
-            return changed_files, response
-        except requests.HTTPError as e:
-            if e.response and e.response.status_code in (403, 429):
-                log.warning(f"GitHub API rate limit exceeded while getting changed files: {e}")
-                log.info("Will use ZIP download to avoid rate limits")
-                return [], {'rate_limited': True}
-            else:
-                log.error(f"Failed to get changed files: {e}")
-                return [], None
-        except requests.RequestException as e:
-            log.error(f"Failed to get changed files: {e}")
-            return [], None
-    
-    def download_individual_file(self, file_info: Dict) -> Tuple[bool, Optional[str]]:
-        """Download a single file from GitHub
-        Returns: (success, error_type) where error_type can be 'rate_limit', 'network', or None"""
-        if not file_info.get('download_url'):
-            log.warning(f"No download URL for {file_info['filename']}")
-            return False, None
-
-        try:
-            # Calculate local path
-            relative_path = file_info['filename'].replace('skins/', '')
-            local_path = self.target_dir / relative_path
-            
-            # Handle file removal
-            if file_info['status'] == 'removed':
-                if local_path.exists():
-                    local_path.unlink()
-                    log.info(f"Removed {local_path}")
-                return True, None
-            
-            # Create directory if needed
-            local_path.parent.mkdir(parents=True, exist_ok=True)
-            
-            # First, get the file contents from GitHub API
-            response = self.session.get(file_info['download_url'])
-            response.raise_for_status()
-            file_data = response.json()
-            
-            # Check if we got the expected response structure
-            if 'download_url' not in file_data:
-                log.error(f"Unexpected response format for {file_info['filename']}")
-                return False, None
-            
-            # Download the actual file content
-            download_response = self.session.get(file_data['download_url'], stream=True, timeout=SKIN_DOWNLOAD_STREAM_TIMEOUT_S)
-            download_response.raise_for_status()
-            
-            with open(local_path, 'wb') as f:
-                for chunk in download_response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-            
-            log.info(f"Downloaded {file_info['filename']}")
-            return True, None
-            
-        except requests.HTTPError as e:
-            if e.response and e.response.status_code == 429:
-                log.warning(f"Rate limit hit while downloading {file_info['filename']}")
-                return False, 'rate_limit'
-            else:
-                log.error(f"Failed to download {file_info['filename']}: {e}")
-                return False, 'network'
-        except requests.RequestException as e:
-            log.error(f"Failed to download {file_info['filename']}: {e}")
-            return False, 'network'
-        except Exception as e:
-            log.error(f"Error saving {file_info['filename']}: {e}")
-            return False, None
-        
     def download_repo_zip(self, progress_start: float = 0.0, progress_end: float = 70.0, download_label: str = "skins") -> Optional[Path]:
         """Download the entire repository as a ZIP file with retry logic"""
         # GitHub's ZIP download URL format
@@ -759,15 +497,6 @@ class RepoDownloader:
                         f"and {extracted_resources_count} resource files (skipped {skipped_skin_count} existing skin files, "
                         f"{skipped_resources_count} existing resource files)")
 
-                # Save resources state after successful extraction
-                # Save state if we processed any resources files (extracted or skipped)
-                # or if we found resources files in the ZIP (even if none were processed)
-                if extracted_resources_count > 0 or skipped_resources_count > 0 or resources_count > 0:
-                    resources_state = self.get_resources_state()
-                    if resources_state and not resources_state.get('rate_limited'):
-                        resources_state['last_checked'] = resources_state.get('last_commit_date')
-                        self.save_resources_state(resources_state)
-
                 total_mb = _format_size(total_bytes)
                 self._emit_progress(progress_end, f"Extraction complete ({_format_size(processed_bytes)} / {total_mb})")
                 # Return True if extraction completed successfully, regardless of whether new files were extracted
@@ -782,244 +511,63 @@ class RepoDownloader:
             return False
     
     def download_incremental_updates(self, force_update: bool = False) -> bool:
-        """Download only changed files since last update"""
+        """Check for updates via version.txt and download if needed"""
         try:
-            self._emit_progress(0, "Checking skins repository state...")
-            # Check if repository has changed
-            skins_changed = force_update or self.has_repository_changed()
-            
-            self._emit_progress(5, "Checking skin ID mapping repository state...")
-            resources_changed = force_update or self.has_resources_changed()
-            
-            if not skins_changed and not resources_changed:
-                self._emit_progress(100, "Skins and skin ID mapping already up to date")
-                return True
+            self._emit_progress(0, "Checking for skin updates...")
 
-            # If only resources changed (and skins didn't), download ZIP but only extract resources
-            if resources_changed and not skins_changed:
-                log.info("Only resources folder changed, will download ZIP to update resources only")
-                self._emit_progress(10, "Skin ID mapping needs update, downloading...")
-                # Download ZIP but only extract resources, skip skins
-                # Always overwrite since we detected resources have changed
-                return self._download_and_extract_resources_only(force_update=True)
-            
-            # If both changed, use normal flow (download ZIP and extract both)
-            if resources_changed and skins_changed:
-                log.info("Both skins and resources folders changed, will download ZIP to update both")
-                self._emit_progress(10, "Skins and skin ID mapping need update, downloading...")
-                # Always force update since we detected changes
-                return self.download_and_extract_skins(force_update=True)
-            
-            # Only skins changed, continue with incremental update
-            
-            local_state = self.load_local_state()
-            current_state = self.get_repo_state()
-            
-            if not current_state:
-                log.error("Failed to get current repository state")
-                return False
-            
-            # If rate limited, skip incremental and use ZIP download
-            if current_state.get('rate_limited'):
-                log.warning("Rate limited, skipping incremental update and using ZIP download")
-                return self.download_and_extract_skins(force_update=True)
-            
-            # If no local state, check if we have existing skins or mappings
-            if not local_state:
-                existing_skins = list(self.target_dir.rglob("*.rse"))
-                existing_previews = list(self.target_dir.rglob("*.png"))
-
-                # Check if resources exists
-                from utils.core.paths import get_user_data_dir
-                mapping_dir = get_user_data_dir() / "resources"
-                existing_mappings = list(mapping_dir.rglob("*.json")) if mapping_dir.exists() else []
-
-                if existing_skins or existing_previews or existing_mappings:
-                    # Skins exist but no state file (likely manual download)
-                    # Create state file from current commit instead of deleting everything
-                    log.info(f"No state file found but found existing files (likely manual download):")
-                    log.info(f"  - {len(existing_skins)} skin files (.rse)")
-                    log.info(f"  - {len(existing_previews)} preview .png files")
-                    log.info(f"  - {len(existing_mappings)} skin ID mapping files")
-                    log.info("Creating state file from current GitHub commit to enable future updates...")
-
-                    # Save current state so future updates work
-                    current_state['last_checked'] = current_state.get('last_commit_date')
-                    self.save_local_state(current_state)
-
-                    # Also save resources state if mappings exist
-                    if existing_mappings:
-                        resources_state = self.get_resources_state()
-                        if resources_state and not resources_state.get('rate_limited'):
-                            resources_state['last_checked'] = resources_state.get('last_commit_date')
-                            self.save_resources_state(resources_state)
-
-                    self._emit_progress(100, "Skins detected, ready for future updates")
-                    return True
-                else:
-                    log.info("No local state and no existing files found, performing full download")
-                    return self.download_and_extract_skins(force_update=True)
-            
-            # Get changed files since last update
-            last_commit = local_state.get('last_commit_sha')
-            if not last_commit:
-                log.info("No previous commit found, performing full download")
-                return self.download_and_extract_skins(force_update=True)
-            
-            changed_files, response = self.get_changed_files(last_commit)
-            if not changed_files:
-                log.info("No skin files changed")
-                # Update state even if no changes
-                current_state['last_checked'] = current_state['last_commit_date']
-                self.save_local_state(current_state)
+            if not force_update and not self.has_repository_changed():
                 self._emit_progress(100, "Skins already up to date")
                 return True
-            
-            log.info(f"Found {len(changed_files)} changed files")
-            
-            # Check if we have enough API calls remaining
-            if response:
-                remaining_calls = self.get_remaining_api_calls(response)
-                # Need at least 2 API calls per file (get file info + download)
-                estimated_calls = len(changed_files) * 2
-                log.info(f"Remaining API calls: {remaining_calls}, estimated needed: {estimated_calls}")
-                if remaining_calls < estimated_calls + 10:  # 10 calls buffer
-                    log.warning(f"Not enough API calls remaining ({remaining_calls}), falling back to ZIP download")
-                    return self.download_and_extract_skins(force_update=True)
-            
-            # Download changed files
-            total_files = len(changed_files)
-            success_count = 0
-            rate_limit_hit = False
-            for index, file_info in enumerate(changed_files, start=1):
-                success, error_type = self.download_individual_file(file_info)
-                if success:
-                    success_count += 1
-                    if total_files > 0:
-                        progress = 10 + (index / total_files) * 80
-                        self._emit_progress(progress, f"Applying updates {index}/{total_files}")
-                elif error_type == 'rate_limit':
-                    rate_limit_hit = True
-                    log.warning("Rate limit hit during download, falling back to ZIP download")
-                    break
-            
-            if rate_limit_hit:
-                log.info("Switching to ZIP download due to rate limit")
-                return self.download_and_extract_skins(force_update=True)
-            
-            log.info(f"Downloaded {success_count}/{len(changed_files)} changed files")
-            
-            # Update local state
-            current_state['last_checked'] = current_state['last_commit_date']
-            self.save_local_state(current_state)
-            
-            completed = success_count > 0
-            if completed:
-                self._emit_progress(100, "Skins updated")
-            else:
-                self._emit_progress(100, "No changes applied")
-            return completed
-            
+
+            # Version changed or force update — download everything
+            return self.download_and_extract_skins(force_update=True)
+
         except Exception as e:
-            log.error(f"Failed to download incremental updates: {e}")
+            log.error(f"Failed to check for updates: {e}")
             self._emit_progress(100, f"Failed: {e}")
             return False
     
     def download_and_extract_skins(self, force_update: bool = False) -> bool:
-        """Download repository and extract skins in one operation"""
+        """Download repository ZIP and extract skins + resources"""
         try:
             self._emit_progress(0, "Preparing download...")
-            # Clean up any conflicting files/directories
+            # Clean up any conflicting files
             if self.target_dir.exists():
-                # Remove any file named "skins" that might conflict
                 skins_file = self.target_dir / "skins"
                 if skins_file.exists() and skins_file.is_file():
                     log.info("Removing conflicting 'skins' file...")
                     skins_file.unlink()
-            
-            # Check if skins already exist and we're not forcing update
-            if not force_update and self.target_dir.exists():
-                existing_skins = list(self.target_dir.rglob("*.rse"))
-                if existing_skins:
-                    # Still check if resources need updating
-                    self._emit_progress(2, "Checking skin ID mapping...")
-                    resources_need_update = self.has_resources_changed()
-                    skins_need_update = self.has_repository_changed()
-                    
-                    if not resources_need_update and not skins_need_update:
-                        log.info(f"Found {len(existing_skins)} existing skins and resources are up to date, skipping download")
-                        self._emit_progress(100, "Skins and skin ID mapping already up to date")
-                        return True
-                    elif resources_need_update and not skins_need_update:
-                        # Only resources need updating, use resources-only method
-                        log.info(f"Found {len(existing_skins)} existing skins, but resources need updating")
-                        self._emit_progress(5, "Skin ID mapping needs update, downloading...")
-                        # Always overwrite since we detected resources have changed
-                        return self._download_and_extract_resources_only(force_update=True)
-                    else:
-                        log.info(f"Found {len(existing_skins)} existing skins, but updates needed")
-            
-            # Check if resources need updating (separate from skins)
-            if not force_update:
-                self._emit_progress(2, "Checking skin ID mapping...")
-            resources_need_update = force_update or self.has_resources_changed()
-            skins_need_update = force_update or self.has_repository_changed()
-            
-            # If skins exist (files are there) but only resources need updating, use resources-only method
-            existing_skins = list(self.target_dir.rglob("*.rse")) if self.target_dir.exists() else []
-            if existing_skins and resources_need_update and not skins_need_update:
-                # Only resources need updating, use resources-only method
-                log.info("Only resources folder needs updating (skins already exist)")
-                # Always overwrite since we detected resources have changed
-                return self._download_and_extract_resources_only(force_update=True)
-            elif resources_need_update:
-                log.info("Resources folder needs updating")
-            else:
-                log.info("Resources folder is up to date")
-            
-            # Determine download label for progress messages
-            if skins_need_update and resources_need_update:
-                download_label = "both"
-            elif resources_need_update:
-                download_label = "resources"
-            else:
-                download_label = "skins"
-            
+
             # Download repository ZIP
-            zip_path = self.download_repo_zip(progress_start=5.0, progress_end=70.0, download_label=download_label)
+            zip_path = self.download_repo_zip(progress_start=5.0, progress_end=70.0, download_label="both")
             if not zip_path:
                 self._emit_progress(5, "Failed to start download")
                 return False
-            
+
             try:
-                # Extract from ZIP (only what needs updating)
-                # Overwrite if either skins or resources need updating (we already checked)
+                # Extract everything (skins + resources)
                 success = self.extract_skins_from_zip(
                     zip_path,
-                    overwrite_existing=skins_need_update or resources_need_update,
+                    overwrite_existing=True,
                     progress_start=70.0,
                     progress_end=100.0,
-                    extract_skins=skins_need_update,
-                    extract_resources=resources_need_update,
+                    extract_skins=True,
+                    extract_resources=True,
                 )
-                
-                # Save state after successful full download
+
+                # Save version after successful download
                 if success:
-                    current_state = self.get_repo_state()
-                    if current_state:
-                        current_state['last_checked'] = current_state['last_commit_date']
-                        self.save_local_state(current_state)
-                    
-                    # Resources state is saved in extract_skins_from_zip if resources were extracted
-                
+                    remote_version = self.fetch_remote_version()
+                    if remote_version:
+                        self.save_local_version(remote_version)
+
                 if success:
                     self._emit_progress(100, "Skins ready")
                     return True
                 self._emit_progress(100, "Extraction failed")
                 return False
-                
+
             finally:
-                # Clean up temporary ZIP file
                 try:
                     zip_path.unlink()
                     log.debug("Cleaned up temporary ZIP file")
@@ -1027,190 +575,9 @@ class RepoDownloader:
                     log.debug(f"Could not remove temporary ZIP file: {e}")
                 except Exception as e:
                     log.debug(f"Unexpected error cleaning up ZIP file: {e}")
-            
+
         except Exception as e:
             log.error(f"Failed to download and extract skins: {e}")
-            self._emit_progress(100, f"Failed: {e}")
-            return False
-    
-    def download_resources_folder_only(self, progress_start: float = 0.0, progress_end: float = 70.0) -> Optional[Path]:
-        """Download only the resources folder using GitHub Contents API (more efficient than full ZIP)"""
-        try:
-            log.info("Downloading resources folder using GitHub Contents API...")
-            self._emit_progress(progress_start, "Downloading skin ID mapping folder...")
-            
-            # Create temporary directory for resources
-            temp_dir = tempfile.mkdtemp()
-            temp_dir_path = Path(temp_dir)
-            resources_local_path = temp_dir_path / "resources"
-            resources_local_path.mkdir(parents=True, exist_ok=True)
-            
-            downloaded_files = []
-            
-            def download_folder_contents(path: str, local_path: Path, current_progress: float, max_progress: float) -> Tuple[bool, float]:
-                """Recursively download folder contents from GitHub"""
-                try:
-                    api_url = f"{self.api_base}/contents/{path}"
-                    response = self.session.get(api_url, timeout=SKIN_DOWNLOAD_STREAM_TIMEOUT_S)
-                    response.raise_for_status()
-                    contents = response.json()
-                    
-                    if not isinstance(contents, list):
-                        log.error(f"Unexpected response format for {path}")
-                        return False, current_progress
-                    
-                    total_items = len(contents)
-                    if total_items == 0:
-                        return True, current_progress
-                    
-                    progress_per_item = (max_progress - current_progress) / total_items
-                    
-                    for idx, item in enumerate(contents):
-                        if item['type'] == 'file':
-                            # Download file
-                            file_path = local_path / item['name']
-                            file_path.parent.mkdir(parents=True, exist_ok=True)
-                            
-                            download_response = self.session.get(
-                                item['download_url'], 
-                                stream=True, 
-                                timeout=SKIN_DOWNLOAD_STREAM_TIMEOUT_S
-                            )
-                            download_response.raise_for_status()
-                            
-                            with open(file_path, 'wb') as f:
-                                for chunk in download_response.iter_content(chunk_size=8192):
-                                    if chunk:
-                                        f.write(chunk)
-                            
-                            downloaded_files.append(file_path)
-                            log.debug(f"Downloaded {item['path']}")
-                            
-                            # Update progress
-                            item_progress = current_progress + (idx + 1) * progress_per_item
-                            self._emit_progress(
-                                item_progress,
-                                f"Downloading skin ID mapping... ({len(downloaded_files)} files)"
-                            )
-                            
-                        elif item['type'] == 'dir':
-                            # Recursively download subdirectory
-                            subdir_path = local_path / item['name']
-                            subdir_progress_start = current_progress + (idx * progress_per_item)
-                            subdir_progress_end = current_progress + ((idx + 1) * progress_per_item)
-                            success, new_progress = download_folder_contents(
-                                item['path'], 
-                                subdir_path, 
-                                subdir_progress_start,
-                                subdir_progress_end
-                            )
-                            if not success:
-                                return False, new_progress
-                            current_progress = new_progress
-                    
-                    return True, max_progress
-                    
-                except requests.RequestException as e:
-                    log.error(f"Failed to download folder contents for {path}: {e}")
-                    return False, current_progress
-                except Exception as e:
-                    log.error(f"Error downloading folder contents for {path}: {e}")
-                    return False, current_progress
-            
-            # Download resources folder recursively
-            success, final_progress = download_folder_contents("resources", resources_local_path, progress_start, progress_end)
-            if not success:
-                log.error("Failed to download resources folder")
-                shutil.rmtree(temp_dir_path, ignore_errors=True)
-                return None
-            
-            if not downloaded_files:
-                log.warning("No files downloaded from resources folder")
-                shutil.rmtree(temp_dir_path, ignore_errors=True)
-                return None
-            
-            # Create ZIP from downloaded folder
-            temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
-            temp_zip_path = Path(temp_zip.name)
-            temp_zip.close()
-            
-            log.info(f"Creating ZIP from {len(downloaded_files)} downloaded files...")
-            self._emit_progress(progress_end - 5, "Creating ZIP archive...")
-            
-            # Create ZIP file with structure: RoseSkin-main/resources/... (to match extract_skins_from_zip expectations)
-            with zipfile.ZipFile(temp_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                for file_path in resources_local_path.rglob('*'):
-                    if file_path.is_file():
-                        # Add RoseSkin-main/ prefix to match extract_skins_from_zip expectations
-                        relative_path = file_path.relative_to(temp_dir_path)
-                        arcname = f"RoseSkin-main/{relative_path}"
-                        zipf.write(file_path, arcname)
-            
-            # Clean up temp directory
-            shutil.rmtree(temp_dir_path, ignore_errors=True)
-            
-            log.info(f"Resources folder downloaded and zipped: {temp_zip_path} ({len(downloaded_files)} files)")
-            self._emit_progress(progress_end, "Download complete")
-            return temp_zip_path
-            
-        except Exception as e:
-            log.error(f"Failed to download resources folder via GitHub API: {e}")
-            # Clean up on error
-            if 'temp_dir_path' in locals():
-                shutil.rmtree(temp_dir_path, ignore_errors=True)
-            return None
-    
-    def _download_and_extract_resources_only(self, force_update: bool = False) -> bool:
-        """Download resources folder only (using GitHub API) and extract"""
-        try:
-            self._emit_progress(10, "Preparing download...")
-            
-            # Download resources folder using GitHub Contents API (more efficient than full ZIP)
-            zip_path = self.download_resources_folder_only(progress_start=10.0, progress_end=70.0)
-            if not zip_path:
-                log.warning("Failed to download resources via GitHub API, falling back to full ZIP")
-                # Fallback to full ZIP if API method fails
-                zip_path = self.download_repo_zip(progress_start=10.0, progress_end=70.0, download_label="resources")
-                if not zip_path:
-                    self._emit_progress(10, "Failed to start download")
-                    return False
-            
-            try:
-                # Extract only resources from ZIP (skip skins)
-                success = self.extract_skins_from_zip(
-                    zip_path,
-                    overwrite_existing=force_update,
-                    progress_start=70.0,
-                    progress_end=100.0,
-                    extract_skins=False,  # Skip skins
-                    extract_resources=True,  # Only extract resources
-                )
-                
-                # Save resources state after successful extraction
-                if success:
-                    resources_state = self.get_resources_state()
-                    if resources_state and not resources_state.get('rate_limited'):
-                        resources_state['last_checked'] = resources_state.get('last_commit_date')
-                        self.save_resources_state(resources_state)
-                
-                if success:
-                    self._emit_progress(100, "Skin ID mapping ready")
-                    return True
-                self._emit_progress(100, "Extraction failed")
-                return False
-                
-            finally:
-                # Clean up temporary ZIP file
-                try:
-                    zip_path.unlink()
-                    log.debug("Cleaned up temporary ZIP file")
-                except (OSError, FileNotFoundError) as e:
-                    log.debug(f"Could not remove temporary ZIP file: {e}")
-                except Exception as e:
-                    log.debug(f"Unexpected error cleaning up ZIP file: {e}")
-            
-        except Exception as e:
-            log.error(f"Failed to download and extract resources: {e}")
             self._emit_progress(100, f"Failed: {e}")
             return False
     
