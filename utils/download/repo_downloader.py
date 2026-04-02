@@ -40,7 +40,7 @@ class RepoDownloader:
     def __init__(
         self,
         target_dir: Path = None,
-        repo_url: str = "https://github.com/Alban1911/RoseSkin",
+        repo_url: str = "https://github.com/Alban1911/RoseTestSkins",
         progress_callback: Optional[ProgressCallback] = None,
     ):
         self.repo_url = repo_url
@@ -52,9 +52,13 @@ class RepoDownloader:
         })
         self.progress_callback = progress_callback
 
-        # Version tracking — uses raw.githubusercontent.com (CDN, no rate limits)
-        self.version_url = "https://raw.githubusercontent.com/Alban1911/RoseSkin/main/version.txt"
+        # Version tracking
         self.version_file = self.target_dir / '.skin_version'
+        self.api_base = "https://api.github.com/repos/Alban1911/RoseTestSkins"
+        self.raw_base = "https://raw.githubusercontent.com/Alban1911/RoseTestSkins/main"
+
+        # If changed files exceed this, use full ZIP instead of individual downloads
+        self.incremental_file_threshold = 200
     
     def _emit_progress(self, percent: float, message: Optional[str] = None):
         if not self.progress_callback:
@@ -62,56 +66,169 @@ class RepoDownloader:
         bounded = max(0.0, min(percent, 100.0))
         self.progress_callback(int(bounded), message)
     
-    def fetch_remote_version(self) -> Optional[str]:
-        """Fetch the current version from RoseSkin repo (CDN, no API rate limits)"""
+    def fetch_remote_sha(self) -> Optional[str]:
+        """Fetch the latest commit SHA from the skin repo via GitHub API (1 API call)."""
         try:
-            # Cache-busting parameter to bypass GitHub CDN cache (~5 min TTL)
-            url = f"{self.version_url}?t={int(time.time())}"
-            response = self.session.get(url, timeout=10, headers={'Cache-Control': 'no-cache'})
+            response = self.session.get(
+                f"{self.api_base}/commits/main",
+                headers={'Accept': 'application/vnd.github.v3+json'},
+                timeout=10,
+            )
             response.raise_for_status()
-            version = response.text.strip()
-            log.info(f"Remote skin version: {version}")
-            return version
+            sha = response.json().get('sha')
+            if sha:
+                log.info(f"Remote skin SHA: {sha[:8]}")
+            return sha
         except requests.RequestException as e:
-            log.warning(f"Failed to fetch remote version: {e}")
+            log.warning(f"Failed to fetch remote SHA: {e}")
             return None
 
-    def get_local_version(self) -> Optional[str]:
-        """Read the locally stored skin version"""
+    def get_local_sha(self) -> Optional[str]:
+        """Read the locally stored commit SHA."""
         if not self.version_file.exists():
             return None
         try:
             return self.version_file.read_text(encoding='utf-8').strip()
         except (IOError, OSError) as e:
-            log.warning(f"Failed to read local version: {e}")
+            log.warning(f"Failed to read local SHA: {e}")
             return None
 
-    def save_local_version(self, version: str):
-        """Save the skin version string locally"""
+    def save_local_sha(self, sha: str):
+        """Save the commit SHA locally."""
         try:
             self.version_file.parent.mkdir(parents=True, exist_ok=True)
-            self.version_file.write_text(version, encoding='utf-8')
+            self.version_file.write_text(sha, encoding='utf-8')
         except (IOError, OSError) as e:
-            log.warning(f"Failed to save local version: {e}")
+            log.warning(f"Failed to save local SHA: {e}")
 
     def has_repository_changed(self) -> bool:
-        """Check if repository has changed by comparing version.txt"""
-        remote_version = self.fetch_remote_version()
-        if remote_version is None:
-            log.warning("Could not fetch remote version, assuming no changes")
+        """Check if repository has changed by comparing commit SHAs."""
+        remote_sha = self.fetch_remote_sha()
+        if remote_sha is None:
+            log.warning("Could not fetch remote SHA, assuming no changes")
             return False
 
-        local_version = self.get_local_version()
-        if local_version is None:
-            log.info("No local version found, repository needs download")
+        local_sha = self.get_local_sha()
+        if local_sha is None:
+            log.info("No local SHA found, repository needs download")
             return True
 
-        if local_version != remote_version:
-            log.info(f"Repository version changed: {local_version} -> {remote_version}")
+        if local_sha != remote_sha:
+            log.info(f"Repository changed: {local_sha[:8]} -> {remote_sha[:8]}")
             return True
 
-        log.info("Repository version unchanged, skipping download")
+        log.info("Repository unchanged, skipping download")
         return False
+
+    def get_changed_files(self, old_sha: str, new_sha: str) -> Optional[List[Dict]]:
+        """Get list of changed files between two commits using GitHub compare API.
+
+        Returns list of changed file dicts, or None if the API call fails.
+        Each dict has: 'filename', 'status' ('added'/'modified'/'removed')
+        """
+        try:
+            response = self.session.get(
+                f"{self.api_base}/compare/{old_sha}...{new_sha}",
+                timeout=20,
+            )
+            response.raise_for_status()
+            data = response.json()
+            files = []
+            for f in data.get('files', []):
+                files.append({
+                    'filename': f['filename'],
+                    'status': f['status'],
+                    'previous_filename': f.get('previous_filename'),
+                })
+            log.info(f"Compare API: {len(files)} changed files between {old_sha[:8]}..{new_sha[:8]}")
+            return files
+        except requests.RequestException as e:
+            log.warning(f"Compare API failed, will use full ZIP: {e}")
+            return None
+
+    def _resolve_local_path(self, repo_path: str) -> Optional[Path]:
+        """Map a repo-relative path (skins/... or resources/...) to a local path."""
+        from utils.core.paths import get_user_data_dir
+        if repo_path.startswith('skins/'):
+            return self.target_dir / repo_path[len('skins/'):]
+        elif repo_path.startswith('resources/'):
+            return get_user_data_dir() / "resources" / repo_path[len('resources/'):]
+        return None
+
+    def download_changed_files(self, changed_files: List[Dict]) -> bool:
+        """Download changed files individually via raw.githubusercontent.com.
+
+        Handles skins/ and resources/ paths. Supports add, modify, remove, rename.
+        Returns True if all files were processed successfully.
+        """
+        total = len(changed_files)
+        success_count = 0
+        fail_count = 0
+        dirs_to_check = set()
+
+        for idx, file_info in enumerate(changed_files, 1):
+            filename = file_info['filename']
+            status = file_info['status']
+            local_path = self._resolve_local_path(filename)
+
+            if local_path is None:
+                continue
+
+            # Handle renames — delete old path, then download new
+            if status == 'renamed' and file_info.get('previous_filename'):
+                old_path = self._resolve_local_path(file_info['previous_filename'])
+                if old_path and old_path.exists():
+                    try:
+                        old_path.unlink()
+                        dirs_to_check.add(old_path.parent)
+                        log.debug(f"Removed old path {file_info['previous_filename']}")
+                    except OSError as e:
+                        log.warning(f"Failed to remove old path {old_path}: {e}")
+
+            # Handle removals
+            if status == 'removed':
+                if local_path.exists():
+                    try:
+                        local_path.unlink()
+                        dirs_to_check.add(local_path.parent)
+                        log.debug(f"Removed {filename}")
+                    except OSError as e:
+                        log.warning(f"Failed to remove {local_path}: {e}")
+                success_count += 1
+                progress = 10 + int(80 * idx / total)
+                self._emit_progress(progress, f"Updating files... {idx}/{total}")
+                continue
+
+            # Download added/modified/renamed files
+            raw_url = f"{self.raw_base}/{filename}"
+            try:
+                resp = self.session.get(raw_url, stream=True, timeout=SKIN_DOWNLOAD_STREAM_TIMEOUT_S)
+                resp.raise_for_status()
+                local_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(local_path, 'wb') as f:
+                    for chunk in resp.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                success_count += 1
+                log.debug(f"Downloaded {filename}")
+            except requests.RequestException as e:
+                log.warning(f"Failed to download {filename}: {e}")
+                fail_count += 1
+
+            progress = 10 + int(80 * idx / total)
+            self._emit_progress(progress, f"Updating files... {idx}/{total}")
+
+        # Clean up empty directories left by removals/renames
+        for dir_path in sorted(dirs_to_check, reverse=True):
+            try:
+                while dir_path != self.target_dir and dir_path.exists() and not any(dir_path.iterdir()):
+                    dir_path.rmdir()
+                    dir_path = dir_path.parent
+            except OSError:
+                pass
+
+        log.info(f"Incremental update: {success_count} succeeded, {fail_count} failed out of {total}")
+        return fail_count == 0
     
     def download_repo_zip(self, progress_start: float = 0.0, progress_end: float = 70.0, download_label: str = "skins") -> Optional[Path]:
         """Download the entire repository as a ZIP file with retry logic"""
@@ -259,7 +376,7 @@ class RepoDownloader:
                 continue
             
             # Convert ZIP path to relative path
-            relative_path = file_info.filename.replace('RoseSkin-main/', '')
+            relative_path = file_info.filename.replace('RoseTestSkins-main/', '')
 
             # Remove 'skins/' or 'resources/' prefix to match local structure
             if relative_path.startswith('skins/'):
@@ -339,8 +456,8 @@ class RepoDownloader:
                 if extract_skins:
                     for file_info in zip_ref.filelist:
                         # Look for files in skins/ directory, but skip the skins directory itself
-                        if (file_info.filename.startswith('RoseSkin-main/skins/') and 
-                            file_info.filename != 'RoseSkin-main/skins/' and
+                        if (file_info.filename.startswith('RoseTestSkins-main/skins/') and 
+                            file_info.filename != 'RoseTestSkins-main/skins/' and
                             not file_info.filename.endswith('/')):
                             skins_files.append(file_info)
                             
@@ -357,8 +474,8 @@ class RepoDownloader:
                 if extract_resources:
                     for file_info in zip_ref.filelist:
                         # Look for files in resources/ directory (entire folder)
-                        if (file_info.filename.startswith('RoseSkin-main/resources/') and 
-                            file_info.filename != 'RoseSkin-main/resources/' and
+                        if (file_info.filename.startswith('RoseTestSkins-main/resources/') and 
+                            file_info.filename != 'RoseTestSkins-main/resources/' and
                             not file_info.filename.endswith('/')):
                             resources_files.append(file_info)
                             resources_count += 1
@@ -417,7 +534,7 @@ class RepoDownloader:
                             continue
 
                         label = "Extracting skins..." if entry_type == "skin" else "Extracting skin ID mapping..."
-                        relative_path = file_info.filename.replace('RoseSkin-main/', '')
+                        relative_path = file_info.filename.replace('RoseTestSkins-main/', '')
                         is_zip = relative_path.endswith('.rse')
                         is_png = relative_path.endswith('.png')
 
@@ -511,15 +628,44 @@ class RepoDownloader:
             return False
     
     def download_incremental_updates(self, force_update: bool = False) -> bool:
-        """Check for updates via version.txt and download if needed"""
+        """Check for updates via commit SHA and download incrementally if possible."""
         try:
             self._emit_progress(0, "Checking for skin updates...")
 
-            if not force_update and not self.has_repository_changed():
+            remote_sha = self.fetch_remote_sha()
+            if remote_sha is None:
+                log.warning("Could not fetch remote SHA, assuming no changes")
                 self._emit_progress(100, "Skins already up to date")
                 return True
 
-            # Version changed or force update — download everything
+            local_sha = self.get_local_sha()
+
+            # No change
+            if not force_update and local_sha == remote_sha:
+                log.info("Repository unchanged, skipping download")
+                self._emit_progress(100, "Skins already up to date")
+                return True
+
+            # Try incremental update if we have both SHAs
+            if not force_update and local_sha and local_sha != remote_sha:
+                self._emit_progress(5, "Checking changed files...")
+                changed_files = self.get_changed_files(local_sha, remote_sha)
+
+                if changed_files is not None and 0 < len(changed_files) <= self.incremental_file_threshold:
+                    log.info(f"Incremental update: {len(changed_files)} files (threshold: {self.incremental_file_threshold})")
+                    self._emit_progress(10, f"Downloading {len(changed_files)} changed files...")
+                    success = self.download_changed_files(changed_files)
+                    if success:
+                        self.save_local_sha(remote_sha)
+                        self._emit_progress(100, "Skins updated")
+                        return True
+                    else:
+                        log.warning("Incremental update had failures, falling back to full ZIP")
+
+                elif changed_files is not None and len(changed_files) > self.incremental_file_threshold:
+                    log.info(f"Too many changed files ({len(changed_files)}), using full ZIP")
+
+            # Fall back to full ZIP download
             return self.download_and_extract_skins(force_update=True)
 
         except Exception as e:
@@ -555,11 +701,11 @@ class RepoDownloader:
                     extract_resources=True,
                 )
 
-                # Save version after successful download
+                # Save SHA after successful download
                 if success:
-                    remote_version = self.fetch_remote_version()
-                    if remote_version:
-                        self.save_local_version(remote_version)
+                    remote_sha = self.fetch_remote_sha()
+                    if remote_sha:
+                        self.save_local_sha(remote_sha)
 
                 if success:
                     self._emit_progress(100, "Skins ready")
