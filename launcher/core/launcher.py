@@ -142,8 +142,7 @@ def run_launcher(dev_mode: bool = False, test_download_fail: bool = False) -> No
 
         def worker():
             try:
-                # Auto-update disabled - versions uploaded manually
-                # _perform_update(dialog, dev_mode=dev_mode)
+                _perform_update(dialog, dev_mode=dev_mode)
 
                 hash_sequence = HashCheckSequence()
                 hash_sequence.perform_hash_check(dialog, dev_mode=dev_mode)
