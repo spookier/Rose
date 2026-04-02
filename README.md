@@ -4,7 +4,7 @@
 
   <img src="./assets/icon.png" alt="Rose Icon" width="128" height="128">
 
-[![Installer](https://img.shields.io/badge/Installer-Windows-32A832)](https://gitlab.com/Alban1911/Rose/-/releases) [![Ko-Fi](https://img.shields.io/badge/KoFi-Donate-C03030?logo=ko-fi&logoColor=white)](https://ko-fi.com/roseapp) [![Discord](https://img.shields.io/discord/1465467335946272780?color=32A832&logo=discord&logoColor=white&label=Discord)](https://discord.com/invite/roseapp)  [![License](https://img.shields.io/badge/License-Open%20Source-C03030)](LICENSE)
+[![Installer](https://img.shields.io/badge/Installer-Windows-32A832)](https://gitlab.com/Alban1911/Rose/-/releases) [![Ko-Fi](https://img.shields.io/badge/KoFi-Donate-C03030?logo=ko-fi&logoColor=white)](https://ko-fi.com/roseapp) [![Discord](https://img.shields.io/discord/1465467335946272780?color=32A832&logo=discord&logoColor=white&label=Discord)](https://discord.com/invite/roseapp) [![License](https://img.shields.io/badge/License-Open%20Source-C03030)](LICENSE)
 
 
 </div>
@@ -19,16 +19,22 @@ Rose is an open-source automatic skin changer for League of Legends that enables
 
 ## Architecture
 
-Rose consists of two main components:
+Rose consists of three main components:
 
 ### Python Backend
 
 - **LCU API Integration**: Communicates with the League Client via the League Client Update (LCU) API
 - **Skin Injection**: Handles skin injection compatible with Riot Vanguard
 - **WebSocket Bridge**: Operates a WebSocket server for real-time communication with frontend plugins
-- **Skin Management**: Downloads and manages skins from the [LeagueSkins repository](https://github.com/Alban1911/LeagueSkins)
+- **Skin Management**: Downloads and manages encrypted skin files from the [LeagueSkins repository](https://github.com/Alban1911/LeagueSkins) — files are decrypted at runtime and wiped after use
+- **Party Mode**: Enables skin sharing between friends in the same lobby via a Cloudflare WebSocket relay
 - **Game Monitoring**: Tracks game state, champion select phases, and loadout countdowns
 - **Analytics**: Sends periodic pings to track unique users (configurable, runs in background thread)
+
+### Cloudflare Workers
+
+- **rose-party-relay**: Durable Object-backed WebSocket relay that manages party rooms (max 10 members per room) for real-time skin selection broadcasting between friends
+- **rose-skin-key**: Serves the skin decryption key at runtime
 
 ### Pengu Loader Plugins
 
@@ -42,23 +48,26 @@ Rose includes a suite of JavaScript plugins that extend the League Client UI:
 - **ROSE-SettingsPanel**: Settings panel accessible from the League of Legends Client
 - **ROSE-RandomSkin**: Random skin selection feature
 - **ROSE-HistoricMode**: Access to the last used skin for every champion
+- **ROSE-PartyMode**: Party mode UI — displays a panel in lobby and champion select to enable skin sharing, view connected peers, and see friends' skin selections in real time
 
 ## How It Works
 
 1. **League Client Integration**: Rose activates **[Pengu Loader](https://github.com/FlorentTariolle/ROSE-Pengu)** on startup, which injects the JavaScript plugins into the League Client
 2. **Skin Detection**: When you hover over a skin in champion select, `ROSE-SkinMonitor` detects the selection and sends it to the Python backend
 3. **Game Opening Delay**: To make sure the injection has time to occur we suspend League of Legend's game process as long as the overlay is not ran
-4. **Game Injection**: Rose injects the selected skin when the game starts
-5. **Seamless Experience**: The skin loads as if you owned it, with full chroma support and no gameplay impact (**Rose will never provide any competitive advantage to its users**)
+4. **Game Injection**: Rose decrypts and injects the selected skin when the game starts
+6. **Seamless Experience**: The skin loads as if you owned it, with full chroma support and no gameplay impact (**Rose will never provide any competitive advantage to its users**)
 
 ## Features
 
 - **Automatic Skin Detection**: Detects skin selections through hover events in champion select
 - **All Skins Accessible**: Access to every skin for every champion
 - **Chroma Support**: Select any chroma variant through the enhanced UI
+- **Party Mode**: Share skins with friends — see each other's selected skins in the same lobby via a secure WebSocket relay
 - **Random Skin Mode**: Automatically select random skins
 - **Historic Mode**: Access last used skin on every champion
 - **Custom Mod Insights**: ROSE-CustomWheel surfaces installed mods relevant to the skin you're hovering over, along with timestamps and quick folder access
+- **Encrypted Skin Files**: Skins are encrypted and only decrypted at injection time
 - **Smart Injection**: Never injects skins you already own
 - **Safe & Compatible**: Injection method compatible with Riot Vanguard
 - **Multi-Language Support**: Works with any client language
@@ -197,6 +206,9 @@ Rose/
 │   │   ├── validation.py
 │   │   ├── normalization.py
 │   │   └── historic.py
+│   ├── crypto/            # Skin encryption
+│   │   ├── skin_crypto.py
+│   │   └── key_provider.py
 │   ├── download/          # Download utilities
 │   │   ├── skin_downloader.py
 │   │   ├── smart_skin_downloader.py
@@ -264,6 +276,37 @@ Rose/
 │   │   └── update_dialog.py
 │   └── updater.py
 │
+├── party/                 # Party mode (skin sharing)
+│   ├── core/              # Party orchestration
+│   │   ├── party_manager.py  # Main party mode orchestrator
+│   │   └── party_state.py
+│   ├── network/           # Networking layer
+│   │   ├── ws_relay.py    # WebSocket relay client
+│   │   ├── peer_connection.py
+│   │   ├── stun_client.py
+│   │   └── udp_transport.py
+│   ├── protocol/          # Wire protocol
+│   │   ├── crypto.py      # XOR cipher with dynamic keys
+│   │   ├── message_types.py
+│   │   └── token_codec.py
+│   ├── discovery/         # Lobby and skin discovery
+│   │   ├── lobby_matcher.py
+│   │   └── skin_collector.py
+│   └── integration/       # UI and injection hooks
+│       ├── injection_hook.py
+│       └── ui_bridge.py
+│
+├── relay-worker/          # Cloudflare Worker — party relay
+│   ├── src/
+│   │   ├── index.ts       # Worker entry point
+│   │   └── room.ts        # Durable Object party room
+│   └── wrangler.toml
+│
+├── skin-key-worker/       # Cloudflare Worker — skin key server
+│   ├── src/
+│   │   └── index.ts
+│   └── wrangler.toml
+│
 ├── analytics/             # Analytics and user tracking
 │   └── core/
 │       ├── machine_id.py  # Machine ID retrieval (Windows Machine GUID)
@@ -280,7 +323,8 @@ Rose/
         ├── ROSE-CustomWheel/
         ├── ROSE-SettingsPanel/
         ├── ROSE-RandomSkin/
-        └── ROSE-HistoricMode/
+        ├── ROSE-HistoricMode/
+        └── ROSE-PartyMode/
 ```
 
 ## Development
@@ -291,6 +335,7 @@ Rose/
 - **[Pengu Loader](https://github.com/FlorentTariolle/ROSE-Pengu)**: Plugin system for League Client
 - **LCU API**: League Client communication
 - **WebSocket**: Real-time frontend-backend communication
+- **Cloudflare Workers + Durable Objects**: Party relay and skin key server
 - **JavaScript/HTML/CSS**: Client UI plugins
 
 ### Contributing
@@ -299,7 +344,7 @@ Rose is open source! Contributions are welcome:
 
 - Report bugs or suggest features via GitHub Issues
 - Submit pull requests for improvements
-- Join our [Discord](https://discord.com/invite/PHVUppft) for discussions
+- Join our [Discord](https://discord.com/invite/roseapp) for discussions
 
 ## Legal Disclaimer
 
