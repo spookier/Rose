@@ -1869,6 +1869,28 @@
       return;
     }
 
+    // If we are in Swiftplay/Grid mode (active thumbnail wrappers exist),
+    // block generic carousel parents from getting buttons to avoid misaligned placement.
+    const isWrapperMode =
+      document.querySelector(".thumbnail-wrapper.active-skin") !== null;
+    const isGenericParent =
+      skinItem.classList.contains("skin-selection-item") &&
+      !skinItem.classList.contains("thumbnail-wrapper");
+
+    if (isWrapperMode && isGenericParent) {
+      const existingButton = skinItem.querySelector(BUTTON_SELECTOR);
+      if (existingButton) {
+        existingButton.remove();
+      }
+      // Extra safety: remove any direct children that look like buttons
+      Array.from(skinItem.children).forEach((child) => {
+        if (child.classList.contains(BUTTON_CLASS)) {
+          child.remove();
+        }
+      });
+      return;
+    }
+
     // Don't create button if champion is not locked (except in Swiftplay mode)
     const isSwiftplay =
       skinItem.classList.contains("thumbnail-wrapper") &&
@@ -2006,6 +2028,7 @@
   function scanSkinSelection() {
     const skinItems = document.querySelectorAll(".skin-selection-item");
     const thumbnailWrappers = document.querySelectorAll(".thumbnail-wrapper");
+    const hasWrappers = thumbnailWrappers.length > 0;
 
     // Only log when state actually changes
     const prevState = scanSkinSelection._lastState;
@@ -2029,6 +2052,20 @@
     // Debug: Check for current skin item - only log when state changes
     let currentItemFound = false;
     skinItems.forEach((skinItem) => {
+      // In wrapper/grid mode, keep buttons exclusively on thumbnail wrappers
+      if (hasWrappers) {
+        const existingButton = skinItem.querySelector(BUTTON_SELECTOR);
+        if (existingButton) {
+          existingButton.remove();
+        }
+        Array.from(skinItem.children).forEach((child) => {
+          if (child.classList.contains(BUTTON_CLASS)) {
+            child.remove();
+          }
+        });
+        return;
+      }
+
       const offset = getSkinOffset(skinItem);
       if (offset === 2) {
         currentItemFound = true;
@@ -2055,7 +2092,7 @@
     });
 
     // Only warn once per state change, with debouncing
-    if (!currentItemFound && skinItems.length > 0) {
+    if (!hasWrappers && !currentItemFound && skinItems.length > 0) {
       const warningKey = `${skinItems.length}-${skinMonitorState?.skinId}`;
       const lastWarning = scanSkinSelection._lastWarning;
       if (lastWarning !== warningKey) {
